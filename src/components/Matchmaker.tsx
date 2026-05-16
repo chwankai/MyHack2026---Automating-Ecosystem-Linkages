@@ -64,24 +64,6 @@ export default function Matchmaker({ actors, programs, userId }: { actors: Actor
         
         <div className="space-y-4">
           <div>
-            <div className="flex justify-between items-center mb-2 px-1">
-              <label className="text-[9px] font-bold uppercase tracking-widest text-slate-400">Program Matrix Context</label>
-              <span className="text-[8px] font-bold text-blue-500 bg-blue-50 px-1.5 py-0.5 rounded">Active Routing</span>
-            </div>
-            <select 
-              value={selectedProgramId}
-              onChange={(e) => setSelectedProgramId(e.target.value)}
-              className="w-full bg-slate-50 border border-slate-200 p-3 text-sm focus:border-blue-600 focus:bg-white rounded-xl outline-none transition-all appearance-none"
-            >
-              <option value="">Global Network (No Local Program)</option>
-              {programs.map(p => (
-                <option key={p.id} value={p.id}>{p.title}</option>
-              ))}
-            </select>
-            <p className="text-[9px] text-slate-400 mt-1.5 px-1">Associating a context allows automated management of high-density linkage cohorts.</p>
-          </div>
-
-          <div>
             <label className="text-[9px] font-bold uppercase tracking-widest text-slate-400 block mb-2 px-1">Primary Node Analysis</label>
             <select 
               onChange={(e) => {

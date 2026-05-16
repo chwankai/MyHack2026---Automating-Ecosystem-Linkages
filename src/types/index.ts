@@ -1,7 +1,8 @@
 export enum ActorType {
   COMPANY = 'company',
   MENTOR = 'mentor',
-  PARTNER = 'partner'
+  PARTNER = 'partner',
+  SERVICE_PROVIDER = 'service_provider'
 }
 
 export enum LinkageStatus {
@@ -18,6 +19,7 @@ export interface Actor {
   subType?: string;
   region: string;
   bio: string;
+  resources?: string;
   metadata: Record<string, any>;
   createdAt: string;
   updatedAt: string;
@@ -31,6 +33,7 @@ export interface Program {
   region: string;
   active: boolean;
   createdBy: string;
+  partnerNames?: string[];
 }
 
 export interface Linkage {

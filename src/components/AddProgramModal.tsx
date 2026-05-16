@@ -3,14 +3,17 @@ import { X, Save } from 'lucide-react';
 import { motion } from 'motion/react';
 import { collection, addDoc, serverTimestamp } from 'firebase/firestore';
 import { db } from '../lib/firebase';
+import { Actor, ActorType } from '../types';
+import { suggestPartnersForProgram } from '../services/gemini';
 
 interface AddProgramModalProps {
   isOpen: boolean;
   onClose: () => void;
   userId: string;
+  actors: Actor[];
 }
 
-export default function AddProgramModal({ isOpen, onClose, userId }: AddProgramModalProps) {
+export default function AddProgramModal({ isOpen, onClose, userId, actors }: AddProgramModalProps) {
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [region, setRegion] = useState('Global');
@@ -21,12 +24,33 @@ export default function AddProgramModal({ isOpen, onClose, userId }: AddProgramM
     setLoading(true);
 
     try {
-      await addDoc(collection(db, 'programs'), {
+      const programData = {
         title: title.trim(),
         description: description.trim(),
         region: region.trim(),
         active: true,
         createdBy: userId,
+      };
+
+      // Automatically suggest partners for this program
+      const partners = actors.filter(a => a.type === ActorType.PARTNER);
+      // Create clean version for AI
+      const aiProgramData = {
+        ...programData,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString()
+      };
+      
+      let suggestedPartnerNames: string[] = [];
+      try {
+        suggestedPartnerNames = await suggestPartnersForProgram(aiProgramData, partners);
+      } catch (aiErr) {
+        console.warn("Partner suggestion AI failed:", aiErr);
+      }
+
+      await addDoc(collection(db, 'programs'), {
+        ...programData,
+        partnerNames: suggestedPartnerNames,
         createdAt: serverTimestamp(),
         updatedAt: serverTimestamp()
       });
@@ -55,9 +79,9 @@ export default function AddProgramModal({ isOpen, onClose, userId }: AddProgramM
       <motion.div 
         initial={{ opacity: 0, scale: 0.95, y: 10 }}
         animate={{ opacity: 1, scale: 1, y: 0 }}
-        className="bg-white max-w-lg w-full border border-slate-200 shadow-2xl overflow-hidden rounded-2xl"
+        className="bg-white max-w-lg w-full border border-slate-200 shadow-2xl overflow-hidden rounded-2xl max-h-[90vh] flex flex-col"
       >
-        <div className="p-6 border-b border-slate-100 flex justify-between items-center bg-slate-50/50">
+        <div className="p-5 border-b border-slate-100 flex justify-between items-center bg-slate-50/50 shrink-0">
           <div>
             <h2 className="font-bold text-lg text-slate-800 tracking-tight">New Program Blueprint</h2>
             <p className="text-[10px] text-slate-400 uppercase font-bold tracking-widest">Architectural Specification</p>
@@ -67,40 +91,42 @@ export default function AddProgramModal({ isOpen, onClose, userId }: AddProgramM
           </button>
         </div>
 
-        <form onSubmit={handleSubmit} className="p-6 space-y-5">
-          <div>
-            <label className="text-[10px] font-bold uppercase tracking-widest text-slate-400 block mb-1.5 ml-1">Program Title</label>
-            <input 
-              required
-              value={title}
-              onChange={e => setTitle(e.target.value)}
-              className="w-full bg-slate-50 border border-slate-200 p-3 text-sm focus:border-blue-600 focus:bg-white rounded-xl outline-none transition-all"
-              placeholder="e.g. Nexus Accelerator 2024"
-            />
+        <form onSubmit={handleSubmit} className="flex flex-col min-h-0 overflow-hidden">
+          <div className="p-6 space-y-5 overflow-y-auto">
+            <div>
+              <label className="text-[10px] font-bold uppercase tracking-widest text-slate-400 block mb-1.5 ml-1">Program Title</label>
+              <input 
+                required
+                value={title}
+                onChange={e => setTitle(e.target.value)}
+                className="w-full bg-slate-50 border border-slate-200 p-3 text-sm focus:border-blue-600 focus:bg-white rounded-xl outline-none transition-all"
+                placeholder="e.g. Nexus Accelerator 2024"
+              />
+            </div>
+
+            <div>
+              <label className="text-[10px] font-bold uppercase tracking-widest text-slate-400 block mb-1.5 ml-1">Geographic Focus</label>
+              <input 
+                value={region}
+                onChange={e => setRegion(e.target.value)}
+                className="w-full bg-slate-50 border border-slate-200 p-3 text-sm focus:border-blue-600 focus:bg-white rounded-xl outline-none transition-all"
+                placeholder="e.g. Global, EMEA, SEA"
+              />
+            </div>
+
+            <div>
+              <label className="text-[10px] font-bold uppercase tracking-widest text-slate-400 block mb-1.5 ml-1">Program Scope & Objectives</label>
+              <textarea 
+                required
+                value={description}
+                onChange={e => setDescription(e.target.value)}
+                className="w-full bg-slate-50 border border-slate-200 p-3 text-sm focus:border-blue-600 focus:bg-white rounded-xl outline-none transition-all min-h-[120px] resize-none"
+                placeholder="Define the primary goals and cohort parameters..."
+              />
+            </div>
           </div>
 
-          <div>
-            <label className="text-[10px] font-bold uppercase tracking-widest text-slate-400 block mb-1.5 ml-1">Geographic Focus</label>
-            <input 
-              value={region}
-              onChange={e => setRegion(e.target.value)}
-              className="w-full bg-slate-50 border border-slate-200 p-3 text-sm focus:border-blue-600 focus:bg-white rounded-xl outline-none transition-all"
-              placeholder="e.g. Global, EMEA, SEA"
-            />
-          </div>
-
-          <div>
-            <label className="text-[10px] font-bold uppercase tracking-widest text-slate-400 block mb-1.5 ml-1">Program Scope & Objectives</label>
-            <textarea 
-              required
-              value={description}
-              onChange={e => setDescription(e.target.value)}
-              className="w-full bg-slate-50 border border-slate-200 p-3 text-sm focus:border-blue-600 focus:bg-white rounded-xl outline-none transition-all min-h-[120px] resize-none"
-              placeholder="Define the primary goals and cohort parameters..."
-            />
-          </div>
-
-          <div className="pt-2">
+          <div className="p-6 pt-2 border-t border-slate-50 shrink-0">
             <button 
               disabled={loading}
               className="w-full bg-blue-600 text-white py-4 font-bold text-sm tracking-wide rounded-xl hover:bg-blue-700 transition-all shadow-md active:scale-[0.98] disabled:opacity-50 flex items-center justify-center gap-2"
