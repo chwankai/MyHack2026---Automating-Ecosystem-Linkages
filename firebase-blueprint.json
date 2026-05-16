@@ -1,0 +1,69 @@
+{
+  "entities": {
+    "Actor": {
+      "title": "Actor",
+      "description": "Any participant in the ecosystem (Company, Mentor, Partner)",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "type": { "type": "string", "enum": ["company", "mentor", "partner"] },
+        "subType": { "type": "string", "description": "e.g. Fintech, Hardware, Corporate, VC" },
+        "region": { "type": "string" },
+        "bio": { "type": "string" },
+        "metadata": { "type": "object", "description": "Sector specific details like stage, expertise fields" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" },
+        "ownerId": { "type": "string" }
+      },
+      "required": ["name", "type", "ownerId"]
+    },
+    "Program": {
+      "title": "Program",
+      "description": "An initiative or cohort that actors can be linked to",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "title": { "type": "string" },
+        "description": { "type": "string" },
+        "region": { "type": "string" },
+        "active": { "type": "boolean" },
+        "createdBy": { "type": "string" }
+      },
+      "required": ["title", "createdBy"]
+    },
+    "Linkage": {
+      "title": "Linkage",
+      "description": "A first-class relationship entity between actors or programs",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "sourceId": { "type": "string" },
+        "targetId": { "type": "string" },
+        "programId": { "type": "string", "description": "The program this linkage belongs to" },
+        "type": { "type": "string", "description": "e.g. MENTOR_TO_COMPANY, COMPANY_TO_PROGRAM" },
+        "status": { "type": "string", "enum": ["proposed", "active", "completed", "rejected"] },
+        "aiJustification": { "type": "string" },
+        "engagementScore": { "type": "number" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" },
+        "createdById": { "type": "string" }
+      },
+      "required": ["sourceId", "targetId", "type", "status", "createdById"]
+    }
+  },
+  "firestore": {
+    "/actors/{actorId}": {
+      "schema": "Actor",
+      "description": "Global directory of participants"
+    },
+    "/programs/{programId}": {
+      "schema": "Program",
+      "description": "Available ecosystem programs"
+    },
+    "/linkages/{linkageId}": {
+      "schema": "Linkage",
+      "description": "The relationships automating the ecosystem"
+    }
+  }
+}

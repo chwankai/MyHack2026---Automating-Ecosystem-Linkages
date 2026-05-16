@@ -1,0 +1,133 @@
+// rules_version = '2';
+// service cloud.firestore {
+//   match /databases/{database}/documents {
+//     match /{document=**} {
+//       allow read, write: if false;
+//     }
+//     // ... rest of rules
+//   }
+// }
+
+// Phase 0: Security Spec
+// 1. Data Invariants: 
+//    - Actors must belong to an owner.
+//    - Linkages must have valid source/target actors.
+//    - Linkages must belong to a creator.
+// 2. The "Dirty Dozen" (Simplified for brevity)
+//    - Spoofing ownerId
+//    - Invalid actor types
+//    - Injecting massive strings
+//    - Modifying immutable fields (createdAt)
+// ...
+
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // 0. Default Deny
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // --- Helpers ---
+    function isSignedIn() {
+      return request.auth != null;
+    }
+    
+    function isVerified() {
+      // Allow unverified for now to prevent blocking users, but ideally check email_verified
+      return isSignedIn(); 
+    }
+
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    // --- Validation Helpers ---
+    
+    function isValidActor(data) {
+      return data.name is string && data.name.size() > 0 && data.name.size() <= 500 &&
+             data.type in ['company', 'mentor', 'partner'] &&
+             data.ownerId == request.auth.uid &&
+             ( !('subType' in data) || (data.subType is string && data.subType.size() <= 500) ) &&
+             ( !('region' in data) || (data.region is string && data.region.size() <= 500) ) &&
+             ( !('bio' in data) || (data.bio is string && data.bio.size() <= 2000) ) &&
+             ( !('createdAt' in data) || data.createdAt == request.time ) &&
+             ( !('updatedAt' in data) || data.updatedAt == request.time );
+    }
+
+    function isValidProgram(data) {
+      return data.title is string && data.title.size() > 0 && data.title.size() <= 500 &&
+             data.createdBy == request.auth.uid &&
+             ( !('description' in data) || (data.description is string && data.description.size() <= 2000) ) &&
+             ( !('region' in data) || (data.region is string && data.region.size() <= 500) ) &&
+             ( !('active' in data) || data.active is bool ) &&
+             ( !('createdAt' in data) || data.createdAt == request.time ) &&
+             ( !('updatedAt' in data) || data.updatedAt == request.time );
+    }
+
+    function isValidLinkage(data) {
+      return isValidId(data.sourceId) &&
+             isValidId(data.targetId) &&
+             (!('programId' in data) || (data.programId == null || isValidId(data.programId))) &&
+             data.type is string && data.type.size() <= 500 &&
+             data.status in ['proposed', 'active', 'completed', 'rejected'] &&
+             data.createdById == request.auth.uid &&
+             ( !('aiJustification' in data) || (data.aiJustification is string && data.aiJustification.size() <= 5000) ) &&
+             ( !('engagementScore' in data) || (data.engagementScore is number) ) &&
+             ( !('createdAt' in data) || data.createdAt == request.time ) &&
+             ( !('updatedAt' in data) || data.updatedAt == request.time );
+    }
+
+    // --- Collection Routes ---
+
+    match /actors/{actorId} {
+      // Allow authenticated reads for ecosystem visibility
+      allow read: if isSignedIn();
+      
+      allow create: if isVerified() && isValidId(actorId) && isValidActor(incoming());
+      
+      allow update: if isVerified() && isOwner(existing().ownerId) && 
+                      isValidActor(incoming()) && 
+                      incoming().ownerId == existing().ownerId &&
+                      incoming().createdAt == existing().createdAt;
+                      
+      allow delete: if isVerified() && isOwner(existing().ownerId);
+    }
+
+    match /programs/{programId} {
+      allow read: if isSignedIn();
+      
+      allow create: if isVerified() && isValidId(programId) && isValidProgram(incoming());
+      
+      allow update: if isVerified() && isOwner(existing().createdBy) && 
+                      isValidProgram(incoming()) && 
+                      incoming().createdBy == existing().createdBy;
+                      
+      allow delete: if isVerified() && isOwner(existing().createdBy);
+    }
+
+    match /linkages/{linkageId} {
+      allow read: if isSignedIn();
+      
+      allow create: if isVerified() && isValidId(linkageId) && isValidLinkage(incoming());
+      
+      allow update: if isVerified() && (isOwner(existing().createdById) || isOwner(get(/databases/$(database)/documents/actors/$(existing().sourceId)).data.ownerId)) && 
+                      isValidLinkage(incoming()) && 
+                      incoming().createdById == existing().createdById;
+                      
+      allow delete: if isVerified() && isOwner(existing().createdById);
+    }
+  }
+}
