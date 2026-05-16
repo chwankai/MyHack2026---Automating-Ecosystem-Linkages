@@ -16,17 +16,19 @@ import {
   MoreVertical,
   Brain,
   Database,
-  ArrowRight
+  ArrowRight,
+  Trash2
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { auth, loginWithGoogle, logout, db } from './lib/firebase';
 import { onAuthStateChanged, User } from 'firebase/auth';
-import { collection, query, onSnapshot, addDoc, serverTimestamp, writeBatch, doc } from 'firebase/firestore';
+import { collection, query, onSnapshot, addDoc, serverTimestamp, writeBatch, doc, deleteDoc } from 'firebase/firestore';
 import { Actor, ActorType, Linkage, Program, LinkageStatus } from './types';
 import { generateLinkageSuggestions } from './services/gemini';
 import AddActorModal from './components/AddActorModal';
 import AddProgramModal from './components/AddProgramModal';
 import ProgramDetailsModal from './components/ProgramDetailsModal';
+import ActorProfileModal from './components/ActorProfileModal';
 import Matchmaker from './components/Matchmaker';
 
 // --- Sub-components ---
@@ -68,6 +70,43 @@ export default function App() {
   const [isAddActorModalOpen, setIsAddActorModalOpen] = useState(false);
   const [isAddProgramModalOpen, setIsAddProgramModalOpen] = useState(false);
   const [selectedProgram, setSelectedProgram] = useState<Program | null>(null);
+  const [selectedActor, setSelectedActor] = useState<Actor | null>(null);
+
+  const handleDeleteActor = async (e: React.MouseEvent, id: string) => {
+    e.stopPropagation();
+
+    const actor = actors.find(a => a.id === id);
+    if (!actor) return;
+
+    const isTiedToLinkage = linkages.some(l => l.sourceId === id || l.targetId === id);
+    const isTiedToProgram = programs.some(p => p.partnerNames?.includes(actor.name));
+
+    if (isTiedToLinkage || isTiedToProgram) {
+      const reasons = [];
+      if (isTiedToLinkage) reasons.push('a relationship linkage');
+      if (isTiedToProgram) reasons.push('a programme blueprint');
+      alert(`Cannot delete this entity. It is currently tied to ${reasons.join(' and ')}.`);
+      return;
+    }
+
+    if (window.confirm('Are you sure you want to delete this entity?')) {
+      await deleteDoc(doc(db, 'actors', id));
+    }
+  };
+
+  const handleDeleteProgram = async (e: React.MouseEvent, id: string) => {
+    e.stopPropagation();
+    if (window.confirm('Are you sure you want to delete this program?')) {
+      await deleteDoc(doc(db, 'programs', id));
+    }
+  };
+
+  const handleDeleteLinkage = async (e: React.MouseEvent, id: string) => {
+    e.stopPropagation();
+    if (window.confirm('Are you sure you want to delete this linkage?')) {
+      await deleteDoc(doc(db, 'linkages', id));
+    }
+  };
 
   const generateSampleData = async () => {
     if (!user) return;
@@ -227,10 +266,10 @@ export default function App() {
         <div>
           <h3 className="text-[10px] uppercase tracking-widest text-slate-400 font-bold mb-3">Workspace</h3>
           <div className="space-y-1">
-            <SidebarItem icon={LayoutDashboard} label="Analytics" active={view === 'dashboard'} onClick={() => setView('dashboard')} />
+            <SidebarItem icon={LayoutDashboard} label="Dashboard" active={view === 'dashboard'} onClick={() => setView('dashboard')} />
             <SidebarItem icon={Building2} label="Entity Library" active={view === 'actors'} onClick={() => setView('actors')} />
-            <SidebarItem icon={Users} label="Program Registry" active={view === 'programs'} onClick={() => setView('programs')} />
-            <SidebarItem icon={Link2} label="Automation Flows" active={view === 'linkages'} onClick={() => setView('linkages')} />
+            <SidebarItem icon={Users} label="Programme Library" active={view === 'programs'} onClick={() => setView('programs')} />
+            <SidebarItem icon={Link2} label="Relationship" active={view === 'linkages'} onClick={() => setView('linkages')} />
           </div>
         </div>
 
@@ -272,7 +311,7 @@ export default function App() {
 
                   {/* Top Stats */}
                   <div className="grid grid-cols-4 gap-4 shrink-0">
-                    <MetricCard label="Total Nodes" value={actors.length} trend="+12%" icon={Building2} />
+                    <MetricCard label="Total Entity" value={actors.length} trend="+12%" icon={Building2} />
                     <MetricCard label="Active Linkages" value={linkages.length} trend="89.4%" icon={Link2} />
                     <MetricCard label="Programs" value={programs.length} trend="Active" icon={Users} />
                     <MetricCard label="System Pending" value="0" trend="Clear" icon={Sparkles} />
@@ -293,11 +332,12 @@ export default function App() {
                                 <th className="px-6 py-3">Source Role</th>
                                 <th className="px-6 py-3">Relationship Type</th>
                                 <th className="px-6 py-3">Status</th>
+                                <th className="px-6 py-3 text-right">Action</th>
                               </tr>
                             </thead>
                             <tbody className="text-[11px] text-slate-600 divide-y divide-slate-50">
                               {linkages.length === 0 ? (
-                                <tr><td colSpan={4} className="px-6 py-12 text-center text-slate-300 font-mono">No propagation events detected</td></tr>
+                                <tr><td colSpan={5} className="px-6 py-12 text-center text-slate-300 font-mono">No propagation events detected</td></tr>
                               ) : (
                                 linkages.slice(0, 8).map(link => (
                                   <tr key={link.id} className="hover:bg-blue-50/30 transition-colors">
@@ -308,6 +348,11 @@ export default function App() {
                                       <span className={`px-2 py-0.5 rounded-full font-bold ${link.status === LinkageStatus.ACTIVE ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-500'}`}>
                                         {link.status}
                                       </span>
+                                    </td>
+                                    <td className="px-6 py-3 text-right">
+                                      <button onClick={(e) => handleDeleteLinkage(e, link.id)} className="text-slate-400 hover:text-red-500 transition-colors inline-flex">
+                                        <Trash2 size={14} />
+                                      </button>
                                     </td>
                                   </tr>
                                 ))
@@ -416,7 +461,7 @@ export default function App() {
                                 {actor.name.charAt(0)}
                               </div>
                               <div>
-                                <div className="text-sm font-bold text-slate-800">{actor.name}</div>
+                                <button onClick={() => setSelectedActor(actor)} className="text-sm font-bold text-slate-800 hover:text-blue-600 hover:underline text-left">{actor.name}</button>
                                 <div className="text-[10px] text-slate-400 font-mono">#{actor.id.slice(0, 8)}</div>
                               </div>
                             </div>
@@ -432,8 +477,11 @@ export default function App() {
                                 </div>
                               )}
                             </div>
-                            <div className="text-right">
+                            <div className="text-right flex items-center justify-end gap-3">
                                <button onClick={() => setView('linkages')} className="text-xs font-bold text-blue-600 hover:underline">Link</button>
+                               <button onClick={(e) => handleDeleteActor(e, actor.id)} className="text-slate-400 hover:text-red-500 transition-colors">
+                                 <Trash2 size={14} />
+                               </button>
                             </div>
                           </div>
                         ))
@@ -509,12 +557,17 @@ export default function App() {
 
                             <div className="mt-auto pt-4 border-t border-slate-50 flex justify-between items-center">
                               <span className="text-[10px] text-slate-400 font-mono">v1.2 Active</span>
-                              <button 
-                                onClick={() => setSelectedProgram(p)}
-                                className="text-[10px] font-bold text-blue-600 uppercase hover:underline"
-                              >
-                                Configuration
-                              </button>
+                              <div className="flex items-center gap-3">
+                                <button 
+                                  onClick={() => setSelectedProgram(p)}
+                                  className="text-[10px] font-bold text-blue-600 uppercase hover:underline"
+                                >
+                                  Configuration
+                                </button>
+                                <button onClick={(e) => handleDeleteProgram(e, p.id)} className="text-slate-400 hover:text-red-500 transition-colors">
+                                  <Trash2 size={14} />
+                                </button>
+                              </div>
                             </div>
                           </div>
                         );
@@ -582,8 +635,13 @@ export default function App() {
                                         </>
                                       )}
                                     </div>
-                                    <div className={`px-2 py-0.5 rounded-full text-[9px] font-bold uppercase ${link.status === LinkageStatus.ACTIVE ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-500'}`}>
-                                      {link.status}
+                                    <div className="flex items-center gap-3">
+                                      <div className={`px-2 py-0.5 rounded-full text-[9px] font-bold uppercase ${link.status === LinkageStatus.ACTIVE ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-500'}`}>
+                                        {link.status}
+                                      </div>
+                                      <button onClick={(e) => handleDeleteLinkage(e, link.id)} className="text-slate-400 hover:text-red-500 transition-colors">
+                                        <Trash2 size={14} />
+                                      </button>
                                     </div>
                                   </div>
                                   <div className="flex gap-4 items-start">
@@ -645,6 +703,13 @@ export default function App() {
         onClose={() => setSelectedProgram(null)}
         associatedLinkages={linkages.filter(l => l.programId === selectedProgram?.id)}
         actors={actors}
+      />
+
+      <ActorProfileModal
+        actor={selectedActor}
+        onClose={() => setSelectedActor(null)}
+        associatedLinkages={linkages.filter(l => l.sourceId === selectedActor?.id || l.targetId === selectedActor?.id)}
+        programs={programs}
       />
     </div>
   );
