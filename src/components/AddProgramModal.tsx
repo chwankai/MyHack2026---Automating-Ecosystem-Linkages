@@ -4,7 +4,6 @@ import { motion } from 'motion/react';
 import { collection, addDoc, serverTimestamp } from 'firebase/firestore';
 import { db } from '../lib/firebase';
 import { Actor, ActorType } from '../types';
-import { suggestPartnersForProgram } from '../services/gemini';
 
 interface AddProgramModalProps {
   isOpen: boolean;
@@ -17,7 +16,12 @@ export default function AddProgramModal({ isOpen, onClose, userId, actors }: Add
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [region, setRegion] = useState('Global');
+  const [selectedPartners, setSelectedPartners] = useState<string[]>([]);
   const [loading, setLoading] = useState(false);
+
+  const togglePartner = (name: string) => {
+    setSelectedPartners(prev => prev.includes(name) ? prev.filter(n => n !== name) : [...prev, name]);
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -32,25 +36,9 @@ export default function AddProgramModal({ isOpen, onClose, userId, actors }: Add
         createdBy: userId,
       };
 
-      // Automatically suggest partners for this program
-      const partners = actors.filter(a => a.type === ActorType.PARTNER);
-      // Create clean version for AI
-      const aiProgramData = {
-        ...programData,
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString()
-      };
-      
-      let suggestedPartnerNames: string[] = [];
-      try {
-        suggestedPartnerNames = await suggestPartnersForProgram(aiProgramData, partners);
-      } catch (aiErr) {
-        console.warn("Partner suggestion AI failed:", aiErr);
-      }
-
       await addDoc(collection(db, 'programs'), {
         ...programData,
-        partnerNames: suggestedPartnerNames,
+        partnerNames: selectedPartners,
         createdAt: serverTimestamp(),
         updatedAt: serverTimestamp()
       });
@@ -58,6 +46,7 @@ export default function AddProgramModal({ isOpen, onClose, userId, actors }: Add
       setTitle('');
       setDescription('');
       setRegion('Global');
+      setSelectedPartners([]);
     } catch (err) {
       console.error("Error adding program:", err);
       const errInfo = {
@@ -123,6 +112,39 @@ export default function AddProgramModal({ isOpen, onClose, userId, actors }: Add
                 className="w-full bg-slate-50 border border-slate-200 p-3 text-sm focus:border-blue-600 focus:bg-white rounded-xl outline-none transition-all min-h-[120px] resize-none"
                 placeholder="Define the primary goals and cohort parameters..."
               />
+            </div>
+
+            <div>
+              <label className="text-[10px] font-bold uppercase tracking-widest text-slate-400 block mb-1.5 ml-1">Assign Entities</label>
+              <div className="border border-slate-200 rounded-xl overflow-hidden max-h-64 overflow-y-auto bg-slate-50">
+                {[
+                  { name: 'Companies', items: actors.filter(a => a.type === ActorType.COMPANY) },
+                  { name: 'Mentors', items: actors.filter(a => a.type === ActorType.MENTOR) },
+                  { name: 'Partners', items: actors.filter(a => a.type === ActorType.PARTNER) },
+                  { name: 'Service Providers', items: actors.filter(a => a.type === ActorType.SERVICE_PROVIDER) },
+                ].map(group => group.items.length > 0 && (
+                  <div key={group.name}>
+                    <div className="bg-slate-100 text-[10px] font-bold uppercase text-slate-500 px-3 py-1 border-b border-slate-200 sticky top-0 z-10">
+                      {group.name}
+                    </div>
+                    {group.items.map(actor => (
+                      <label key={actor.id} className="flex items-center gap-3 p-3 hover:bg-white border-b border-slate-100 cursor-pointer transition-colors">
+                        <input 
+                          type="checkbox" 
+                          checked={selectedPartners.includes(actor.name)}
+                          onChange={() => togglePartner(actor.name)}
+                          className="w-4 h-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
+                        />
+                        <div className="flex-1">
+                          <div className="text-sm font-bold text-slate-800">{actor.name}</div>
+                          <div className="text-[10px] uppercase font-bold text-slate-400">{actor.type}</div>
+                        </div>
+                      </label>
+                    ))}
+                  </div>
+                ))}
+                {actors.length === 0 && <div className="p-4 text-center text-xs text-slate-400">No entities available in matrix.</div>}
+              </div>
             </div>
           </div>
 

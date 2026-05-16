@@ -46,8 +46,11 @@ export const generateLinkageSuggestions = async (
     });
 
     return JSON.parse(response.text || "[]");
-  } catch (error) {
+  } catch (error: any) {
     console.error("AI Matching failed:", error);
+    if (typeof window !== 'undefined') {
+      window.alert("AI Error: " + (error.message || String(error)));
+    }
     return [];
   }
 };

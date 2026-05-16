@@ -533,7 +533,7 @@ export default function App() {
                                 {p.active ? 'Running' : 'Paused'}
                               </span>
                               <div className="flex items-center gap-2">
-                                <span className="bg-slate-50 px-2 py-0.5 rounded text-[8px] font-bold text-slate-400">PTRS: {p.partnerNames?.length || 0}</span>
+                                <span className="bg-slate-50 px-2 py-0.5 rounded text-[8px] font-bold text-slate-400">ENTITIES: {p.partnerNames?.length || 0}</span>
                                 <span className="text-[10px] text-slate-400 uppercase font-bold">{p.region}</span>
                               </div>
                             </div>
@@ -544,13 +544,33 @@ export default function App() {
                             
                             {p.partnerNames && p.partnerNames.length > 0 && (
                               <div className="mb-6 space-y-2">
-                                <p className="text-[8px] font-bold text-slate-400 uppercase tracking-widest px-1">Linked Partners</p>
+                                <p className="text-[8px] font-bold text-slate-400 uppercase tracking-widest px-1">Linked Entities</p>
                                 <div className="flex flex-wrap gap-1">
-                                  {p.partnerNames.map((name, i) => (
-                                    <div key={i} className="text-[9px] bg-blue-50 text-blue-600 px-2 py-1 rounded font-bold border border-blue-100">
-                                      {name}
-                                    </div>
-                                  ))}
+                                  {p.partnerNames.map((name, i) => {
+                                    const actor = actors.find(a => a.name === name);
+                                    let colorClass = 'bg-slate-50 text-slate-600 border-slate-100';
+                                    let Icon = Users;
+                                    
+                                    if (actor?.type === ActorType.COMPANY) {
+                                      colorClass = 'bg-emerald-50 text-emerald-600 border-emerald-100';
+                                      Icon = Building2;
+                                    } else if (actor?.type === ActorType.MENTOR) {
+                                      colorClass = 'bg-blue-50 text-blue-600 border-blue-100';
+                                      Icon = Brain;
+                                    } else if (actor?.type === ActorType.PARTNER) {
+                                      colorClass = 'bg-amber-50 text-amber-600 border-amber-100';
+                                      Icon = Globe;
+                                    } else if (actor?.type === ActorType.SERVICE_PROVIDER) {
+                                      colorClass = 'bg-purple-50 text-purple-600 border-purple-100';
+                                      Icon = Settings;
+                                    }
+
+                                    return (
+                                      <div key={i} className={`text-[9px] px-2 py-1 rounded font-bold border flex items-center gap-1.5 ${colorClass}`}>
+                                        <Icon size={10} /> {name}
+                                      </div>
+                                    );
+                                  })}
                                 </div>
                               </div>
                             )}
@@ -594,7 +614,7 @@ export default function App() {
 
                   <div className="flex-1 min-h-0 flex gap-6">
                     <div className="w-1/3 overflow-auto pr-2 pb-8">
-                        <Matchmaker actors={actors} programs={programs} userId={user.uid} />
+                        <Matchmaker actors={actors} programs={programs} linkages={linkages} userId={user.uid} />
                     </div>
                     <div className="w-2/3 overflow-auto pb-8">
                       <div className="bg-white border border-slate-200 rounded-2xl shadow-sm overflow-hidden flex flex-col h-full">

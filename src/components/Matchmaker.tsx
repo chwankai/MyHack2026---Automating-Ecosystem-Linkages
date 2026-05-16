@@ -6,25 +6,54 @@ import { generateLinkageSuggestions } from '../services/gemini';
 import { db } from '../lib/firebase';
 import { collection, addDoc, serverTimestamp } from 'firebase/firestore';
 
-export default function Matchmaker({ actors, programs, userId }: { actors: Actor[], programs: Program[], userId: string }) {
-  const [selectedSource, setSelectedSource] = useState<Actor | null>(null);
+export default function Matchmaker({ actors, programs, linkages, userId }: { actors: Actor[], programs: Program[], linkages: Linkage[], userId: string }) {
+  const [selectedSourceId, setSelectedSourceId] = useState<string>('');
+  const [targetType, setTargetType] = useState<ActorType>(ActorType.MENTOR);
   const [selectedProgramId, setSelectedProgramId] = useState<string>('');
   const [suggestions, setSuggestions] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
   const [processingId, setProcessingId] = useState<string | null>(null);
 
-  const findMatches = async (actor: Actor) => {
+  const handleDiscover = async () => {
+    if (!selectedSourceId) return;
+    const actor = actors.find(a => a.id === selectedSourceId);
+    if (!actor) return;
+
+    const companyPrograms = programs.filter(p => p.partnerNames && p.partnerNames.includes(actor.name));
+
+    const potentialTargets = actors.filter(a => {
+      if (a.type !== targetType || a.id === actor.id) return false;
+      
+      // Filter out if they don't share a program
+      const sharesProgram = companyPrograms.some(p => p.partnerNames && p.partnerNames.includes(a.name));
+      if (!sharesProgram) return false;
+
+      // Filter out if an ongoing linkage already exists
+      const hasOngoingLinkage = linkages.some(l => 
+        l.sourceId === actor.id && 
+        l.targetId === a.id && 
+        l.status !== LinkageStatus.REJECTED
+      );
+      
+      return !hasOngoingLinkage;
+    });
+
+    if (potentialTargets.length === 0) {
+      alert(`There are no entities of type "${targetType}" sharing a program with this company.`);
+      return;
+    }
+
     setLoading(true);
-    setSelectedSource(actor);
-    const targetType = actor.type === ActorType.COMPANY ? ActorType.MENTOR : ActorType.COMPANY;
-    const potentialTargets = actors.filter(a => a.type === targetType && a.id !== actor.id);
     
     const results = await generateLinkageSuggestions(actor, potentialTargets, `${actor.type.toUpperCase()}_TO_${targetType.toUpperCase()}`);
     setSuggestions(results);
     setLoading(false);
   };
 
+
+
   const createLinkage = async (targetId: string, justification: string, score: number) => {
+    const selectedSource = actors.find(a => a.id === selectedSourceId);
     if (!selectedSource) return;
     setProcessingId(targetId);
     try {
@@ -64,21 +93,39 @@ export default function Matchmaker({ actors, programs, userId }: { actors: Actor
         
         <div className="space-y-4">
           <div>
-            <label className="text-[9px] font-bold uppercase tracking-widest text-slate-400 block mb-2 px-1">Primary Node Analysis</label>
+            <label className="text-[9px] font-bold uppercase tracking-widest text-slate-400 block mb-2 px-1">Primary Node (Company)</label>
             <select 
-              onChange={(e) => {
-                const actor = actors.find(a => a.id === e.target.value);
-                if (actor) findMatches(actor);
-              }}
+              value={selectedSourceId}
+              onChange={(e) => setSelectedSourceId(e.target.value)}
               className="w-full bg-slate-50 border border-slate-200 p-3 text-sm focus:border-blue-600 focus:bg-white rounded-xl outline-none transition-all appearance-none"
-              defaultValue=""
             >
-              <option value="" disabled>Select Target for Discovery...</option>
-              {actors.map(a => (
-                <option key={a.id} value={a.id}>{a.name} ({a.type})</option>
+              <option value="" disabled>Select Company...</option>
+              {actors.filter(a => a.type === ActorType.COMPANY).map(a => (
+                <option key={a.id} value={a.id}>{a.name}</option>
               ))}
             </select>
           </div>
+
+          <div>
+            <label className="text-[9px] font-bold uppercase tracking-widest text-slate-400 block mb-2 px-1">Target Persona</label>
+            <select 
+              value={targetType}
+              onChange={(e) => setTargetType(e.target.value as ActorType)}
+              className="w-full bg-slate-50 border border-slate-200 p-3 text-sm focus:border-blue-600 focus:bg-white rounded-xl outline-none transition-all appearance-none"
+            >
+              <option value={ActorType.MENTOR}>Mentor</option>
+              <option value={ActorType.PARTNER}>Partner</option>
+              <option value={ActorType.SERVICE_PROVIDER}>Service Provider</option>
+            </select>
+          </div>
+          
+          <button 
+            onClick={handleDiscover}
+            disabled={!selectedSourceId || loading}
+            className="w-full bg-slate-900 text-white py-3 rounded-xl text-xs font-bold uppercase tracking-widest hover:bg-slate-800 transition-all disabled:opacity-50"
+          >
+            {loading ? 'Propagating Signals...' : 'Discover Linkages'}
+          </button>
           
           <div className="px-4 py-2 bg-slate-50 border border-slate-100 rounded-lg flex items-center justify-between">
             <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Neural Status</span>

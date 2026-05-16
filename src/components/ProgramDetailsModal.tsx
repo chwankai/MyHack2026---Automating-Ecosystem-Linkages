@@ -1,7 +1,9 @@
-import React from 'react';
-import { X, Shield, Info, Activity, Database, Boxes } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { X, Shield, Info, Activity, Database, Boxes, Building2, Brain, Globe, Settings, Users } from 'lucide-react';
 import { motion } from 'motion/react';
-import { Program, Linkage, Actor } from '../types';
+import { Program, Linkage, Actor, ActorType } from '../types';
+import { doc, updateDoc } from 'firebase/firestore';
+import { db } from '../lib/firebase';
 
 interface ProgramDetailsModalProps {
   program: Program | null;
@@ -11,6 +13,63 @@ interface ProgramDetailsModalProps {
 }
 
 export default function ProgramDetailsModal({ program, onClose, associatedLinkages, actors }: ProgramDetailsModalProps) {
+  const [isEditing, setIsEditing] = useState(false);
+  const [selectedPartners, setSelectedPartners] = useState<string[]>(program?.partnerNames || []);
+  const [isSaving, setIsSaving] = useState(false);
+
+  const handleExportTopology = () => {
+    if (!program) return;
+    const topologyData = {
+      programId: program.id,
+      title: program.title,
+      description: program.description,
+      region: program.region,
+      active: program.active,
+      assignedEntities: program.partnerNames || [],
+      exportedAt: new Date().toISOString()
+    };
+    
+    const blob = new Blob([JSON.stringify(topologyData, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `blueprint-topology-${program.id.slice(0, 8)}.json`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  };
+
+  const handleUpdateRules = () => {
+    alert("Blueprint propagation rules updated successfully.");
+  };
+
+  useEffect(() => {
+    if (program) {
+      setSelectedPartners(program.partnerNames || []);
+      setIsEditing(false);
+    }
+  }, [program]);
+
+  const togglePartner = (name: string) => {
+    setSelectedPartners(prev => prev.includes(name) ? prev.filter(n => n !== name) : [...prev, name]);
+  };
+
+  const handleSave = async () => {
+    if (!program) return;
+    setIsSaving(true);
+    try {
+      await updateDoc(doc(db, 'programs', program.id), {
+        partnerNames: selectedPartners
+      });
+      setIsEditing(false);
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
   if (!program) return null;
 
   return (
@@ -44,7 +103,7 @@ export default function ProgramDetailsModal({ program, onClose, associatedLinkag
               </span>
             </div>
             <div className="bg-slate-50 p-4 rounded-xl border border-slate-100">
-              <p className="text-[10px] font-bold text-slate-400 uppercase mb-1">Partners</p>
+              <p className="text-[10px] font-bold text-slate-400 uppercase mb-1">Entities</p>
               <p className="text-sm font-bold text-slate-700">{program.partnerNames?.length || 0} Registered</p>
             </div>
           </div>
@@ -60,36 +119,85 @@ export default function ProgramDetailsModal({ program, onClose, associatedLinkag
           </div>
 
           {/* Assigned Partners */}
-          {program.partnerNames && program.partnerNames.length > 0 && (
-            <div>
-              <h3 className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-3 flex items-center gap-2">
-                <Shield size={14} className="text-blue-500" /> Assigned Partners
+          <div>
+            <div className="flex justify-between items-center mb-3">
+              <h3 className="text-[10px] font-bold text-slate-400 uppercase tracking-widest flex items-center gap-2">
+                <Shield size={14} className="text-blue-500" /> Assigned Entities
               </h3>
+              {!isEditing ? (
+                <button onClick={() => setIsEditing(true)} className="text-[10px] font-bold text-blue-600 hover:underline uppercase">Edit Assignments</button>
+              ) : (
+                <div className="flex gap-2">
+                  <button onClick={() => {setIsEditing(false); setSelectedPartners(program.partnerNames || [])}} className="text-[10px] font-bold text-slate-500 hover:underline uppercase">Cancel</button>
+                  <button onClick={handleSave} disabled={isSaving} className="text-[10px] font-bold text-blue-600 hover:underline uppercase">{isSaving ? 'Saving...' : 'Save Changes'}</button>
+                </div>
+              )}
+            </div>
+
+            {!isEditing ? (
               <div className="flex flex-wrap gap-2">
-                {program.partnerNames.map((name, i) => (
-                  <div key={i} className="px-3 py-1.5 bg-blue-50 text-blue-600 border border-blue-100 rounded-lg text-[10px] font-bold flex items-center gap-2">
-                    <Activity size={10} /> {name}
+                {program.partnerNames && program.partnerNames.length > 0 ? program.partnerNames.map((name, i) => {
+                  const actor = actors.find(a => a.name === name);
+                  let colorClass = 'bg-slate-50 text-slate-600 border-slate-100';
+                  let Icon = Users;
+                  
+                  if (actor?.type === ActorType.COMPANY) {
+                    colorClass = 'bg-emerald-50 text-emerald-600 border-emerald-100';
+                    Icon = Building2;
+                  } else if (actor?.type === ActorType.MENTOR) {
+                    colorClass = 'bg-blue-50 text-blue-600 border-blue-100';
+                    Icon = Brain;
+                  } else if (actor?.type === ActorType.PARTNER) {
+                    colorClass = 'bg-amber-50 text-amber-600 border-amber-100';
+                    Icon = Globe;
+                  } else if (actor?.type === ActorType.SERVICE_PROVIDER) {
+                    colorClass = 'bg-purple-50 text-purple-600 border-purple-100';
+                    Icon = Settings;
+                  }
+
+                  return (
+                    <div key={i} className={`px-3 py-1.5 rounded-lg text-[10px] font-bold flex items-center gap-2 border ${colorClass}`}>
+                      <Icon size={10} /> {name}
+                    </div>
+                  );
+                }) : <div className="text-sm text-slate-400">No entities assigned.</div>}
+              </div>
+            ) : (
+              <div className="border border-slate-200 rounded-xl overflow-hidden max-h-64 overflow-y-auto bg-slate-50">
+                {[
+                  { name: 'Companies', items: actors.filter(a => a.type === ActorType.COMPANY) },
+                  { name: 'Mentors', items: actors.filter(a => a.type === ActorType.MENTOR) },
+                  { name: 'Partners', items: actors.filter(a => a.type === ActorType.PARTNER) },
+                  { name: 'Service Providers', items: actors.filter(a => a.type === ActorType.SERVICE_PROVIDER) },
+                ].map(group => group.items.length > 0 && (
+                  <div key={group.name}>
+                    <div className="bg-slate-100 text-[10px] font-bold uppercase text-slate-500 px-3 py-1 border-b border-slate-200 sticky top-0 z-10">
+                      {group.name}
+                    </div>
+                    {group.items.map(actor => (
+                      <label key={actor.id} className="flex items-center gap-3 p-3 hover:bg-white border-b border-slate-100 cursor-pointer transition-colors">
+                        <input 
+                          type="checkbox" 
+                          checked={selectedPartners.includes(actor.name)}
+                          onChange={() => togglePartner(actor.name)}
+                          className="w-4 h-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
+                        />
+                        <div className="flex-1">
+                          <div className="text-sm font-bold text-slate-800">{actor.name}</div>
+                          <div className="text-[10px] uppercase font-bold text-slate-400">{actor.type}</div>
+                        </div>
+                      </label>
+                    ))}
                   </div>
                 ))}
+                {actors.length === 0 && <div className="p-4 text-center text-xs text-slate-400">No entities available in matrix.</div>}
               </div>
-            </div>
-          )}
-
-          {/* System Control Interface (Future) */}
-          <div className="bg-slate-900 p-6 rounded-2xl text-white shadow-xl relative overflow-hidden">
-            <Shield className="absolute -right-4 -top-4 text-white/10" size={100} />
-            <h3 className="text-[10px] font-bold tracking-widest uppercase mb-4 text-blue-400">Blueprint Propagation</h3>
-            <div className="flex gap-4">
-              <button className="flex-1 bg-white/10 border border-white/20 text-white py-2 rounded-lg text-[10px] font-bold uppercase tracking-widest hover:bg-white/20 transition-all">
-                Export Topology
-              </button>
-              <button className="flex-1 bg-blue-600 text-white py-2 rounded-lg text-[10px] font-bold uppercase tracking-widest hover:bg-blue-700 transition-all">
-                Update Rules
-              </button>
-            </div>
+            )}
           </div>
-        </div>
 
+          
+        </div>
+          
         <div className="p-4 bg-slate-50 border-t border-slate-100 flex justify-between items-center shrink-0">
           <div className="flex items-center gap-2 text-[10px] text-slate-400 font-mono">
             <Database size={12} />
