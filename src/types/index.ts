@@ -7,14 +7,22 @@ export enum ActorType {
 
 export enum LinkageStatus {
   PROPOSED = 'proposed',
+  PENDING_APPROVAL = 'pending_approval',
   ACTIVE = 'active',
   COMPLETED = 'completed',
+  REJECTED = 'rejected'
+}
+
+export enum LinkageResponse {
+  PENDING = 'pending',
+  ACCEPTED = 'accepted',
   REJECTED = 'rejected'
 }
 
 export interface Actor {
   id: string;
   name: string;
+  email?: string;
   type: ActorType;
   subType?: string;
   region: string;
@@ -48,4 +56,11 @@ export interface Linkage {
   createdAt: string;
   updatedAt: string;
   createdById: string;
+  // Email workflow fields
+  emailSent?: boolean;
+  emailSentAt?: string;
+  sourceResponse?: LinkageResponse;
+  targetResponse?: LinkageResponse;
+  sourceRespondedAt?: string;
+  targetRespondedAt?: string;
 }

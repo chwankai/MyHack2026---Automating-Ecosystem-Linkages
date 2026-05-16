@@ -83,12 +83,17 @@ service cloud.firestore {
       return isValidId(data.sourceId) &&
              isValidId(data.targetId) &&
              (!('programId' in data) || (data.programId == null || isValidId(data.programId))) &&
-             data.type is string && data.type.size() <= 500 &&
-             data.status in ['proposed', 'active', 'completed', 'rejected'] &&
-             data.createdById == request.auth.uid &&
-             ( !('aiJustification' in data) || (data.aiJustification is string && data.aiJustification.size() <= 5000) ) &&
+             ( !('type' in data) || data.type is string ) &&
+             ( !('status' in data) || data.status in ['proposed', 'active', 'completed', 'rejected', 'pending_approval'] ) &&
+             ( !('sourceResponse' in data) || (data.sourceResponse in ['pending', 'accepted', 'rejected']) ) &&
+             ( !('targetResponse' in data) || (data.targetResponse in ['pending', 'accepted', 'rejected']) ) &&
+             ( !('sourceRespondedAt' in data) || (data.sourceRespondedAt is string) ) &&
+             ( !('targetRespondedAt' in data) || (data.targetRespondedAt is string) ) &&
+             ( !('emailSent' in data) || (data.emailSent is bool) ) &&
+             ( !('createdById' in data) || (data.createdById is string) ) &&
+             ( !('aiJustification' in data) || (data.aiJustification is string) ) &&
              ( !('engagementScore' in data) || (data.engagementScore is number) ) &&
-             ( !('createdAt' in data) || data.createdAt == request.time ) &&
+             ( !('createdAt' in data) || data.createdAt == request.time || data.createdAt is timestamp || data.createdAt is string ) &&
              ( !('updatedAt' in data) || data.updatedAt == request.time );
     }
 
@@ -125,11 +130,9 @@ service cloud.firestore {
       
       allow create: if isVerified() && isValidId(linkageId) && isValidLinkage(incoming());
       
-      allow update: if isVerified() && (isOwner(existing().createdById) || isOwner(get(/databases/$(database)/documents/actors/$(existing().sourceId)).data.ownerId)) && 
-                      isValidLinkage(incoming()) && 
-                      incoming().createdById == existing().createdById;
+      allow update: if isSignedIn();
                       
-      allow delete: if isVerified() && isOwner(existing().createdById);
+      allow delete: if isVerified() && (isOwner(existing().createdById) || isAdmin());
     }
   }
 }

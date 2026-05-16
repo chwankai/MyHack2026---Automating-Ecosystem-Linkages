@@ -17,19 +17,25 @@ import {
   Brain,
   Database,
   ArrowRight,
-  Trash2
+  Trash2,
+  Send,
+  CheckCircle,
+  XCircle,
+  Clock
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { auth, loginWithGoogle, logout, db } from './lib/firebase';
 import { onAuthStateChanged, User } from 'firebase/auth';
-import { collection, query, onSnapshot, addDoc, serverTimestamp, writeBatch, doc, deleteDoc } from 'firebase/firestore';
-import { Actor, ActorType, Linkage, Program, LinkageStatus } from './types';
+import { collection, query, onSnapshot, addDoc, updateDoc, serverTimestamp, writeBatch, doc, deleteDoc } from 'firebase/firestore';
+import { Actor, ActorType, Linkage, Program, LinkageStatus, LinkageResponse } from './types';
 import { generateLinkageSuggestions } from './services/gemini';
 import AddActorModal from './components/AddActorModal';
 import AddProgramModal from './components/AddProgramModal';
 import ProgramDetailsModal from './components/ProgramDetailsModal';
 import ActorProfileModal from './components/ActorProfileModal';
 import Matchmaker from './components/Matchmaker';
+import SendEmailModal from './components/SendEmailModal';
+import LinkageResponsePage from './components/LinkageResponsePage';
 
 // --- Sub-components ---
 
@@ -61,7 +67,7 @@ const MetricCard = ({ label, value, trend, icon: Icon }: { label: string, value:
 
 export default function App() {
   const [user, setUser] = useState<User | null>(null);
-  const [view, setView] = useState<'dashboard' | 'actors' | 'programs' | 'linkages'>('dashboard');
+  const [view, setView] = useState<'dashboard' | 'actors' | 'programs' | 'linkages' | 'respond'>('dashboard');
   const [actorTab, setActorTab] = useState<'all' | ActorType>('all');
   const [actors, setActors] = useState<Actor[]>([]);
   const [linkages, setLinkages] = useState<Linkage[]>([]);
@@ -71,6 +77,35 @@ export default function App() {
   const [isAddProgramModalOpen, setIsAddProgramModalOpen] = useState(false);
   const [selectedProgram, setSelectedProgram] = useState<Program | null>(null);
   const [selectedActor, setSelectedActor] = useState<Actor | null>(null);
+  // Email workflow state
+  const [emailModalLinkage, setEmailModalLinkage] = useState<Linkage | null>(null);
+  const [respondLinkageId, setRespondLinkageId] = useState<string>('');
+  const [respondParty, setRespondParty] = useState<'source' | 'target'>('source');
+  const [respondDecision, setRespondDecision] = useState<'accepted' | 'rejected' | null>(null);
+
+  // Check URL params for respond action
+  useEffect(() => {
+    const handleUrlParams = () => {
+      const params = new URLSearchParams(window.location.search);
+      const action = params.get('action');
+      const linkageId = params.get('linkageId');
+      const party = params.get('party');
+      const decision = params.get('decision') as 'accepted' | 'rejected' | null;
+      
+      if (action === 'respond' && linkageId && (party === 'source' || party === 'target')) {
+        setRespondLinkageId(linkageId);
+        setRespondParty(party);
+        if (decision) setRespondDecision(decision);
+        setView('respond');
+        // Clean URL without reload
+        window.history.replaceState({}, '', window.location.pathname);
+      }
+    };
+
+    handleUrlParams();
+    window.addEventListener('popstate', handleUrlParams);
+    return () => window.removeEventListener('popstate', handleUrlParams);
+  }, []);
 
   const handleDeleteActor = async (e: React.MouseEvent, id: string) => {
     e.stopPropagation();
@@ -105,6 +140,41 @@ export default function App() {
     e.stopPropagation();
     if (window.confirm('Are you sure you want to delete this linkage?')) {
       await deleteDoc(doc(db, 'linkages', id));
+    }
+  };
+
+  const handleManualResponse = async (linkageId: string, party: 'source' | 'target', response: LinkageResponse) => {
+    try {
+      const linkage = linkages.find(l => l.id === linkageId);
+      if (!linkage) return;
+
+      const linkageRef = doc(db, 'linkages', linkageId);
+      const updateData: any = {
+        updatedAt: serverTimestamp(),
+      };
+
+      if (party === 'source') {
+        updateData.sourceResponse = response;
+        updateData.sourceRespondedAt = new Date().toISOString();
+      } else {
+        updateData.targetResponse = response;
+        updateData.targetRespondedAt = new Date().toISOString();
+      }
+
+      const myResponse = response;
+      const otherResponse = (party === 'source' ? linkage.targetResponse : linkage.sourceResponse) || LinkageResponse.PENDING;
+
+      if (myResponse === LinkageResponse.REJECTED || otherResponse === LinkageResponse.REJECTED) {
+        updateData.status = LinkageStatus.REJECTED;
+      } else if (myResponse === LinkageResponse.ACCEPTED && otherResponse === LinkageResponse.ACCEPTED) {
+        updateData.status = LinkageStatus.ACTIVE;
+      } else {
+        updateData.status = LinkageStatus.PENDING_APPROVAL;
+      }
+
+      await updateDoc(linkageRef, updateData);
+    } catch (err) {
+      console.error('Error updating manual response:', err);
     }
   };
 
@@ -345,7 +415,12 @@ export default function App() {
                                     <td className="px-6 py-3 text-slate-800 font-medium">{link.type.split('_')[0]}</td>
                                     <td className="px-6 py-3">{link.type}</td>
                                     <td className="px-6 py-3">
-                                      <span className={`px-2 py-0.5 rounded-full font-bold ${link.status === LinkageStatus.ACTIVE ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-500'}`}>
+                                      <span className={`px-2 py-0.5 rounded-full font-bold ${
+                                        link.status === LinkageStatus.ACTIVE ? 'bg-emerald-100 text-emerald-700' : 
+                                        link.status === LinkageStatus.REJECTED ? 'bg-red-100 text-red-600' :
+                                        link.status === LinkageStatus.PENDING_APPROVAL ? 'bg-amber-100 text-amber-700' :
+                                        'bg-slate-100 text-slate-500'
+                                      }`}>
                                         {link.status}
                                       </span>
                                     </td>
@@ -636,9 +711,21 @@ export default function App() {
                                       )}
                                     </div>
                                     <div className="flex items-center gap-3">
-                                      <div className={`px-2 py-0.5 rounded-full text-[9px] font-bold uppercase ${link.status === LinkageStatus.ACTIVE ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-500'}`}>
+                                      <div className={`px-2 py-0.5 rounded-full text-[9px] font-bold uppercase ${
+                                        link.status === LinkageStatus.ACTIVE ? 'bg-emerald-100 text-emerald-700' : 
+                                        link.status === LinkageStatus.REJECTED ? 'bg-red-100 text-red-600' :
+                                        link.status === LinkageStatus.PENDING_APPROVAL ? 'bg-amber-100 text-amber-700' :
+                                        'bg-slate-100 text-slate-500'
+                                      }`}>
                                         {link.status}
                                       </div>
+                                      <button 
+                                        onClick={() => setEmailModalLinkage(link)}
+                                        className="text-blue-500 hover:text-blue-700 transition-colors p-1 hover:bg-blue-50 rounded"
+                                        title="Send Proposal Email"
+                                      >
+                                        <Send size={14} />
+                                      </button>
                                       <button onClick={(e) => handleDeleteLinkage(e, link.id)} className="text-slate-400 hover:text-red-500 transition-colors">
                                         <Trash2 size={14} />
                                       </button>
@@ -647,7 +734,44 @@ export default function App() {
                                   <div className="flex gap-4 items-start">
                                     <div className="flex-1">
                                       <div className="text-sm font-bold text-slate-800 mb-1">{source?.name} ⇌ {target?.name}</div>
-                                      <div className="text-[10px] font-mono text-slate-400 mb-4">{link.type} • Confidence: {link.engagementScore?.toFixed(2)}</div>
+                                      <div className="text-[10px] font-mono text-slate-400 mb-3">{link.type} • Confidence: {link.engagementScore?.toFixed(2)}</div>
+                                      
+                                      {/* Response Status Indicators */}
+                                      {link.emailSent && (
+                                        <div className="flex gap-3 mb-4">
+                                          <div className="flex items-center gap-1.5 px-2.5 py-1 bg-slate-50 rounded-lg border border-slate-100">
+                                            {link.sourceResponse === LinkageResponse.ACCEPTED ? (
+                                              <CheckCircle size={10} className="text-emerald-500" />
+                                            ) : link.sourceResponse === LinkageResponse.REJECTED ? (
+                                              <XCircle size={10} className="text-red-500" />
+                                            ) : (
+                                              <Clock size={10} className="text-amber-500 animate-pulse" />
+                                            )}
+                                            <span className="text-[9px] font-bold uppercase text-slate-500">
+                                              Source: {link.sourceResponse || 'pending'}
+                                            </span>
+                                          </div>
+                                          <div className="flex items-center gap-1.5 px-2.5 py-1 bg-slate-50 rounded-lg border border-slate-100">
+                                            {link.targetResponse === LinkageResponse.ACCEPTED ? (
+                                              <CheckCircle size={10} className="text-emerald-500" />
+                                            ) : link.targetResponse === LinkageResponse.REJECTED ? (
+                                              <XCircle size={10} className="text-red-500" />
+                                            ) : (
+                                              <Clock size={10} className="text-amber-500 animate-pulse" />
+                                            )}
+                                            <span className="text-[9px] font-bold uppercase text-slate-500">
+                                              Target: {link.targetResponse || 'pending'}
+                                            </span>
+                                          </div>
+                                          {link.emailSent && (
+                                            <div className="flex items-center gap-1 px-2 py-1 bg-blue-50 rounded-lg border border-blue-100">
+                                              <Mail size={10} className="text-blue-500" />
+                                              <span className="text-[9px] font-bold text-blue-600">Email Sent</span>
+                                            </div>
+                                          )}
+                                        </div>
+                                      )}
+
                                       <div className="text-xs font-sans text-slate-500 leading-relaxed bg-slate-50 p-4 rounded-xl border border-slate-100 group-hover:bg-white transition-colors relative">
                                         <div className="absolute -left-2 top-4 w-1 h-8 bg-blue-500 opacity-20" />
                                         {link.aiJustification}
@@ -662,6 +786,26 @@ export default function App() {
                       </div>
                     </div>
                   </div>
+                </motion.div>
+              )}
+
+              {view === 'respond' && (
+                <motion.div 
+                  key="respond"
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -20 }}
+                  className="pb-12"
+                >
+                    <LinkageResponsePage
+                      linkageId={respondLinkageId}
+                      party={respondParty}
+                      linkages={linkages}
+                      actors={actors}
+                      programs={programs}
+                      userId={user.uid}
+                      autoDecision={respondDecision}
+                    />
                 </motion.div>
               )}
             </AnimatePresence>
@@ -710,6 +854,16 @@ export default function App() {
         onClose={() => setSelectedActor(null)}
         associatedLinkages={linkages.filter(l => l.sourceId === selectedActor?.id || l.targetId === selectedActor?.id)}
         programs={programs}
+      />
+
+      <SendEmailModal
+        isOpen={!!emailModalLinkage}
+        onClose={() => setEmailModalLinkage(null)}
+        linkage={emailModalLinkage}
+        source={emailModalLinkage ? actors.find(a => a.id === emailModalLinkage.sourceId) || null : null}
+        target={emailModalLinkage ? actors.find(a => a.id === emailModalLinkage.targetId) || null : null}
+        program={emailModalLinkage?.programId ? programs.find(p => p.id === emailModalLinkage.programId) || null : null}
+        adminEmail={user.email || ''}
       />
     </div>
   );
