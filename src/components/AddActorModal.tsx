@@ -2,16 +2,17 @@ import React, { useState, useRef } from 'react';
 import { X, Upload, FileText, Sparkles } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { db } from '../lib/firebase';
-import { collection, addDoc, serverTimestamp } from 'firebase/firestore';
-import { ActorType } from '../types';
-import { extractActorInfo } from '../services/gemini';
+import { collection, addDoc, serverTimestamp, doc, updateDoc, arrayUnion } from 'firebase/firestore';
+import { ActorType, Program } from '../types';
+import { extractActorInfo, assignActorToProgram } from '../services/gemini';
 
-export default function AddActorModal({ isOpen, onClose, userId }: { isOpen: boolean, onClose: () => void, userId: string }) {
+export default function AddActorModal({ isOpen, onClose, userId, programs }: { isOpen: boolean, onClose: () => void, userId: string, programs: Program[] }) {
   const [name, setName] = useState('');
   const [type, setType] = useState<ActorType>(ActorType.COMPANY);
   const [sector, setSector] = useState('');
   const [region, setRegion] = useState('');
   const [bio, setBio] = useState('');
+  const [resources, setResources] = useState('');
   const [loading, setLoading] = useState(false);
   const [extracting, setExtracting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -38,6 +39,7 @@ export default function AddActorModal({ isOpen, onClose, userId }: { isOpen: boo
           setSector(extracted.sector || '');
           setRegion(extracted.region || '');
           setBio(extracted.bio || '');
+          setResources(extracted.resources || '');
           setType((extracted.type?.toLowerCase() as ActorType) || ActorType.COMPANY);
         }
       };
@@ -62,6 +64,7 @@ export default function AddActorModal({ isOpen, onClose, userId }: { isOpen: boo
         subType: sector.trim(),
         region: region.trim(),
         bio: bio.trim(),
+        resources: resources.trim(),
         ownerId: userId,
         createdAt: serverTimestamp(),
         updatedAt: serverTimestamp(),
@@ -70,11 +73,41 @@ export default function AddActorModal({ isOpen, onClose, userId }: { isOpen: boo
 
       await addDoc(collection(db, 'actors'), actorData);
       
-      // Reset fields
+      // If it's a Venture Partner, automatically try to assign to a relevant program in background
+      if (type === ActorType.PARTNER && programs.length > 0) {
+        // Create a clean version for AI (JSON serializable)
+        const aiActorData = {
+          ...actorData,
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString()
+        };
+        
+        // Background process - don't await so modal closes faster
+        (async () => {
+          try {
+            const targetProgramId = await assignActorToProgram(aiActorData, programs);
+            if (targetProgramId) {
+              const programRef = doc(db, 'programs', targetProgramId);
+              // Only attempt update if the current user might have permission (e.g. check program owner if possible)
+              // For simplicity in this demo, we'll just try and catch
+              await updateDoc(programRef, {
+                partnerNames: arrayUnion(name.trim()),
+                updatedAt: serverTimestamp()
+              });
+              console.log(`AI assigned partner to program: ${targetProgramId}`);
+            }
+          } catch (aiErr) {
+            console.warn("Background AI assignment failed (likely permission restricted):", aiErr);
+          }
+        })();
+      }
+
+      // Reset fields and close modal immediately
       setName('');
       setSector('');
       setRegion('');
       setBio('');
+      setResources('');
       setType(ActorType.COMPANY);
       onClose();
     } catch (err) {
@@ -102,9 +135,9 @@ export default function AddActorModal({ isOpen, onClose, userId }: { isOpen: boo
       <motion.div 
         initial={{ opacity: 0, scale: 0.95, y: 10 }}
         animate={{ opacity: 1, scale: 1, y: 0 }}
-        className="bg-white max-w-lg w-full border border-slate-200 shadow-2xl overflow-hidden rounded-2xl"
+        className="bg-white max-w-lg w-full border border-slate-200 shadow-2xl overflow-hidden rounded-2xl max-h-[90vh] flex flex-col"
       >
-        <div className="p-6 border-b border-slate-100 flex justify-between items-center bg-slate-50/50">
+        <div className="p-5 border-b border-slate-100 flex justify-between items-center bg-slate-50/50 shrink-0">
           <div>
             <h2 className="font-bold text-lg text-slate-800 tracking-tight">Register Node</h2>
             <p className="text-[10px] text-slate-400 uppercase font-bold tracking-widest">Configuration Interface</p>
@@ -114,25 +147,27 @@ export default function AddActorModal({ isOpen, onClose, userId }: { isOpen: boo
           </button>
         </div>
         
-        <form onSubmit={handleSubmit} className="p-6 space-y-5">
-          {error && (
-            <div className="p-3 bg-red-50 border border-red-100 rounded-xl text-red-600 text-[10px] font-bold uppercase tracking-widest flex items-center gap-2">
-              <X size={14} className="shrink-0" /> {error}
+        <form onSubmit={handleSubmit} className="flex flex-col min-h-0 overflow-hidden">
+          <div className="p-6 space-y-5 overflow-y-auto">
+            {error && (
+              <div className="p-3 bg-red-50 border border-red-100 rounded-xl text-red-600 text-[10px] font-bold uppercase tracking-widest flex items-center gap-2">
+                <X size={14} className="shrink-0" /> {error}
+              </div>
+            )}
+            {/* Node Type First */}
+            <div>
+              <label className="text-[10px] font-bold uppercase tracking-widest text-slate-400 block mb-1.5 ml-1">Node Type</label>
+              <select 
+                value={type}
+                onChange={e => setType(e.target.value as ActorType)}
+                className="w-full bg-slate-50 border border-slate-200 p-3 text-sm focus:border-blue-600 focus:bg-white rounded-xl outline-none transition-all appearance-none font-bold text-slate-700"
+              >
+                <option value={ActorType.COMPANY}>Company Entity</option>
+                <option value={ActorType.MENTOR}>Mentor Node</option>
+                <option value={ActorType.PARTNER}>Venture Partner</option>
+                <option value={ActorType.SERVICE_PROVIDER}>Service Provider</option>
+              </select>
             </div>
-          )}
-          {/* Node Type First */}
-          <div>
-            <label className="text-[10px] font-bold uppercase tracking-widest text-slate-400 block mb-1.5 ml-1">Node Type</label>
-            <select 
-              value={type}
-              onChange={e => setType(e.target.value as ActorType)}
-              className="w-full bg-slate-50 border border-slate-200 p-3 text-sm focus:border-blue-600 focus:bg-white rounded-xl outline-none transition-all appearance-none font-bold text-slate-700"
-            >
-              <option value={ActorType.COMPANY}>Company Entity</option>
-              <option value={ActorType.MENTOR}>Mentor Node</option>
-              <option value={ActorType.PARTNER}>Venture Partner</option>
-            </select>
-          </div>
 
           {/* AI Extraction Tool */}
           <div className="p-4 bg-blue-50 border border-blue-100 rounded-xl">
@@ -210,7 +245,29 @@ export default function AddActorModal({ isOpen, onClose, userId }: { isOpen: boo
             />
           </div>
 
-          <div className="pt-2">
+            <AnimatePresence>
+              {type === ActorType.PARTNER && (
+                <motion.div
+                  initial={{ opacity: 0, height: 0 }}
+                  animate={{ opacity: 1, height: 'auto' }}
+                  exit={{ opacity: 0, height: 0 }}
+                  className="overflow-hidden"
+                >
+                  <div className="pt-2">
+                    <label className="text-[10px] font-bold uppercase tracking-widest text-blue-600 block mb-1.5 ml-1">Resources Provided</label>
+                    <textarea 
+                      value={resources}
+                      onChange={e => setResources(e.target.value)}
+                      className="w-full bg-blue-50/30 border border-blue-100 p-3 text-sm focus:border-blue-600 focus:bg-white rounded-xl outline-none transition-all min-h-[80px] resize-none"
+                      placeholder="List capital, infrastructure, or network assets provided..."
+                    />
+                  </div>
+                </motion.div>
+              )}
+            </AnimatePresence>
+          </div>
+
+          <div className="p-6 pt-2 border-t border-slate-50 shrink-0">
             <button 
               disabled={loading || extracting}
               className="w-full bg-blue-600 text-white py-4 font-bold text-sm tracking-wide rounded-xl hover:bg-blue-700 transition-all shadow-md active:scale-[0.98] disabled:opacity-50"

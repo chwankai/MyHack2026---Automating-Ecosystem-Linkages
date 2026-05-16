@@ -60,6 +60,7 @@ const MetricCard = ({ label, value, trend, icon: Icon }: { label: string, value:
 export default function App() {
   const [user, setUser] = useState<User | null>(null);
   const [view, setView] = useState<'dashboard' | 'actors' | 'programs' | 'linkages'>('dashboard');
+  const [actorTab, setActorTab] = useState<'all' | ActorType>('all');
   const [actors, setActors] = useState<Actor[]>([]);
   const [linkages, setLinkages] = useState<Linkage[]>([]);
   const [programs, setPrograms] = useState<Program[]>([]);
@@ -77,7 +78,8 @@ export default function App() {
       { name: 'GreenFlow', type: ActorType.COMPANY, subType: 'CleanTech', region: 'Singapore', bio: 'Sustainable water management solutions.' },
       { name: 'Dr. Sarah Chen', type: ActorType.MENTOR, subType: 'Fintech', region: 'London', bio: 'Former VP at Goldman, 20y expertise.' },
       { name: 'James Wilson', type: ActorType.MENTOR, subType: 'DeepTech', region: 'Berlin', bio: 'Technical founder with 2 exits.' },
-      { name: 'GovInvest', type: ActorType.PARTNER, subType: 'Venture', region: 'Global', bio: 'Strategic state-backed investment fund.' }
+      { name: 'GovInvest', type: ActorType.PARTNER, subType: 'Venture', region: 'Global', bio: 'Strategic state-backed investment fund.', resources: '$500M Fund, Global Market Access, Regulatory Support' },
+      { name: 'ScaleOps Services', type: ActorType.SERVICE_PROVIDER, subType: 'Legal/Compliance', region: 'New York', bio: 'Specialized regulatory advisory for SaaS.' }
     ];
 
     sampleActors.forEach(a => {
@@ -185,66 +187,65 @@ export default function App() {
   );
 
   return (
-    <div className="h-screen flex flex-col bg-[#F3F4F6] text-slate-900 font-sans overflow-hidden">
-      {/* Header */}
-      <header className="h-16 bg-white border-b border-slate-200 flex items-center justify-between px-8 shrink-0">
-        <div className="flex items-center gap-3">
-          <div className="w-8 h-8 bg-blue-600 rounded flex items-center justify-center">
-            <div className="w-4 h-4 border-2 border-white rounded-sm rotate-45"></div>
+    <div className="h-screen flex bg-[#F3F4F6] text-slate-900 font-sans overflow-hidden">
+      {/* Sidebar - Now containing Logo and User controls */}
+      <aside className="w-64 bg-white border-r border-slate-200 p-6 flex flex-col gap-8 shrink-0">
+        <div className="flex flex-col gap-4">
+          <div className="flex items-center gap-3">
+            <div className="w-8 h-8 bg-blue-600 rounded flex items-center justify-center">
+              <div className="w-4 h-4 border-2 border-white rounded-sm rotate-45"></div>
+            </div>
+            <span className="font-bold text-lg tracking-tight text-slate-800">
+              NexusCore
+            </span>
           </div>
-          <span className="font-bold text-lg tracking-tight text-slate-800">
-            NexusCore <span className="font-normal text-slate-500 underline decoration-blue-600/30">Ecosystem OS</span>
-          </span>
+
+          <div className="flex flex-col gap-2">
+            <div className="px-3 py-1.5 border border-slate-100 rounded-lg text-[9px] font-bold uppercase bg-slate-50 flex items-center gap-2">
+              <span className="w-1.5 h-1.5 bg-emerald-500 rounded-full animate-pulse"></span>
+              System Live
+            </div>
+            
+            <div className="flex items-center justify-between bg-slate-50 p-2 rounded-lg border border-slate-100">
+              <div className="flex items-center gap-2 overflow-hidden">
+                <img src={user.photoURL || ''} className="w-6 h-6 rounded-full border border-slate-200 shrink-0" />
+                <span className="text-[10px] font-bold text-slate-600 truncate">{user.displayName || 'User'}</span>
+              </div>
+              <button onClick={() => logout()} className="text-[8px] uppercase font-bold text-slate-400 hover:text-red-500 transition-colors">Out</button>
+            </div>
+          </div>
         </div>
-        <nav className="flex gap-8 text-sm font-medium text-slate-600">
-          <button onClick={() => setView('linkages')} className={`transition-all pb-5 pt-5 border-b-2 mt-[2px] ${view === 'linkages' ? 'text-blue-600 border-blue-600' : 'text-slate-500 border-transparent hover:text-slate-900'}`}>Relationship Architect</button>
-          <button onClick={() => setView('actors')} className={`transition-all pb-5 pt-5 border-b-2 mt-[2px] ${view === 'actors' ? 'text-blue-600 border-blue-600' : 'text-slate-500 border-transparent hover:text-slate-900'}`}>Entities</button>
-          <button onClick={() => setView('programs')} className={`transition-all pb-5 pt-5 border-b-2 mt-[2px] ${view === 'programs' ? 'text-blue-600 border-blue-600' : 'text-slate-500 border-transparent hover:text-slate-900'}`}>Programs</button>
-          <button onClick={() => setView('dashboard')} className={`transition-all pb-5 pt-5 border-b-2 mt-[2px] ${view === 'dashboard' ? 'text-blue-600 border-blue-600' : 'text-slate-500 border-transparent hover:text-slate-900'}`}>Analytics</button>
-        </nav>
-        <div className="flex gap-4 items-center">
-          <div className="px-3 py-1.5 border border-slate-200 rounded-md text-[10px] font-bold uppercase bg-white flex items-center gap-2">
-            <span className="w-1.5 h-1.5 bg-emerald-500 rounded-full animate-pulse"></span>
-            System Live
+
+        <div>
+          <h3 className="text-[10px] uppercase tracking-widest text-slate-400 font-bold mb-4">Active Context</h3>
+          <div className="p-3 bg-slate-50 rounded-lg border border-slate-200">
+            <p className="text-sm font-bold text-slate-800">Global Nexus Matrix</p>
+            <p className="text-xs text-slate-500">{actors.length} Active Nodes</p>
           </div>
-          <img src={user.photoURL || ''} className="w-8 h-8 rounded-full border border-slate-200" />
-          <button onClick={() => logout()} className="text-[10px] uppercase font-bold text-slate-400 hover:text-red-500">Logout</button>
         </div>
-      </header>
 
-      <div className="flex-1 flex overflow-hidden">
-        {/* Sidebar */}
-        <aside className="w-64 bg-white border-r border-slate-200 p-6 flex flex-col gap-6">
-          <div>
-            <h3 className="text-[10px] uppercase tracking-widest text-slate-400 font-bold mb-4">Active Context</h3>
-            <div className="p-3 bg-slate-50 rounded-lg border border-slate-200">
-              <p className="text-sm font-bold text-slate-800">Global Nexus Matrix</p>
-              <p className="text-xs text-slate-500">{actors.length} Active Nodes detected</p>
-            </div>
+        <div>
+          <h3 className="text-[10px] uppercase tracking-widest text-slate-400 font-bold mb-3">Workspace</h3>
+          <div className="space-y-1">
+            <SidebarItem icon={LayoutDashboard} label="Analytics" active={view === 'dashboard'} onClick={() => setView('dashboard')} />
+            <SidebarItem icon={Building2} label="Entity Library" active={view === 'actors'} onClick={() => setView('actors')} />
+            <SidebarItem icon={Users} label="Program Registry" active={view === 'programs'} onClick={() => setView('programs')} />
+            <SidebarItem icon={Link2} label="Automation Flows" active={view === 'linkages'} onClick={() => setView('linkages')} />
           </div>
+        </div>
 
-          <div>
-            <h3 className="text-[10px] uppercase tracking-widest text-slate-400 font-bold mb-3">Entity Library</h3>
-            <div className="space-y-1">
-              <SidebarItem icon={LayoutDashboard} label="Dashboard View" active={view === 'dashboard'} onClick={() => setView('dashboard')} />
-              <SidebarItem icon={Building2} label="Mentor Nodes" active={view === 'actors'} onClick={() => setView('actors')} />
-              <SidebarItem icon={Users} label="Program Registry" active={view === 'programs'} onClick={() => setView('programs')} />
-              <SidebarItem icon={Link2} label="Automation Flows" active={view === 'linkages'} onClick={() => setView('linkages')} />
-            </div>
+        <div className="mt-auto">
+          <div className="bg-blue-50 border border-blue-100 rounded-xl p-4">
+            <p className="text-[10px] font-bold text-blue-800 mb-1 uppercase underline decoration-blue-500/30">AI Efficiency Tip</p>
+            <p className="text-[11px] leading-relaxed text-blue-600">Consider batching mentor matching for the new DeepTech cohort to optimize resource allocation.</p>
           </div>
+        </div>
+      </aside>
 
-          <div className="mt-auto">
-            <div className="bg-blue-50 border border-blue-100 rounded-xl p-4">
-              <p className="text-[10px] font-bold text-blue-800 mb-1 uppercase underline decoration-blue-500/30">AI Efficiency Tip</p>
-              <p className="text-[11px] leading-relaxed text-blue-600">Consider batching mentor matching for the new DeepTech cohort to optimize resource allocation.</p>
-            </div>
-          </div>
-        </aside>
-
+      <div className="flex-1 flex flex-col overflow-hidden">
         {/* Main Workspace */}
-        <main className="flex-1 flex flex-col overflow-hidden">
-          <div className="flex-1 p-8 overflow-auto flex flex-col gap-6">
-            <AnimatePresence mode="wait">
+        <main className="flex-1 p-10 overflow-auto flex flex-col gap-6">
+          <AnimatePresence mode="wait">
               {view === 'dashboard' && (
                 <motion.div 
                   key="dashboard"
@@ -352,16 +353,41 @@ export default function App() {
                   exit={{ opacity: 0, x: -20 }}
                   className="space-y-6"
                 >
-                  <div className="flex justify-between items-end">
-                    <div>
-                      <h1 className="text-2xl font-bold text-slate-800">Entity Library</h1>
-                      <p className="text-xs text-slate-500">Managing first-class nodes in the global topology</p>
+                  <div className="flex flex-col gap-4">
+                    <div className="flex justify-between items-end">
+                      <div>
+                        <h1 className="text-2xl font-bold text-slate-800">Entity Library</h1>
+                        <p className="text-xs text-slate-500">Managing first-class nodes in the global topology</p>
+                      </div>
+                      <div className="flex gap-2">
+                        {actors.length === 0 && (
+                          <button onClick={generateSampleData} className="px-4 py-2 border border-slate-200 bg-white text-xs font-bold rounded-lg hover:bg-slate-50">Populate Initial Matrix</button>
+                        )}
+                        <button onClick={() => setIsAddActorModalOpen(true)} className="bg-blue-600 text-white px-4 py-2 rounded-lg text-xs font-bold hover:bg-blue-700">Register Node</button>
+                      </div>
                     </div>
-                    <div className="flex gap-2">
-                       {actors.length === 0 && (
-                        <button onClick={generateSampleData} className="px-4 py-2 border border-slate-200 bg-white text-xs font-bold rounded-lg hover:bg-slate-50">Populate Initial Matrix</button>
-                       )}
-                       <button onClick={() => setIsAddActorModalOpen(true)} className="bg-blue-600 text-white px-4 py-2 rounded-lg text-xs font-bold hover:bg-blue-700">Register Node</button>
+
+                    {/* Filter Tabs */}
+                    <div className="flex gap-1 border-b border-slate-200">
+                      {[
+                        { id: 'all', label: 'All Entities' },
+                        { id: ActorType.MENTOR, label: 'Mentors' },
+                        { id: ActorType.PARTNER, label: 'Partners' },
+                        { id: ActorType.COMPANY, label: 'Companies' },
+                        { id: ActorType.SERVICE_PROVIDER, label: 'Providers' }
+                      ].map(tab => (
+                        <button
+                          key={tab.id}
+                          onClick={() => setActorTab(tab.id as any)}
+                          className={`px-4 py-2 text-[10px] font-bold uppercase tracking-widest transition-all border-b-2 ${
+                            actorTab === tab.id 
+                              ? 'border-blue-600 text-blue-600 bg-blue-50/50' 
+                              : 'border-transparent text-slate-400 hover:text-slate-600'
+                          }`}
+                        >
+                          {tab.label}
+                        </button>
+                      ))}
                     </div>
                   </div>
 
@@ -374,15 +400,18 @@ export default function App() {
                       <div className="text-right">Action</div>
                     </div>
                     <div className="divide-y divide-slate-50">
-                      {actors.length === 0 ? (
-                        <div className="p-16 text-center text-slate-300 font-mono">Zero nodes registered in current topology</div>
+                      {actors.filter(a => actorTab === 'all' || a.type === actorTab).length === 0 ? (
+                        <div className="p-16 text-center text-slate-300 font-mono">Zero nodes matching filter in current topology</div>
                       ) : (
-                        actors.map(actor => (
+                        actors
+                          .filter(a => actorTab === 'all' || a.type === actorTab)
+                          .map(actor => (
                           <div key={actor.id} className="grid grid-cols-6 p-4 items-center hover:bg-slate-50/50 transition-colors">
                             <div className="col-span-2 flex items-center gap-3">
                               <div className={`w-8 h-8 rounded-lg flex items-center justify-center text-xs font-bold ${
                                 actor.type === ActorType.COMPANY ? 'bg-emerald-50 text-emerald-600' :
-                                actor.type === ActorType.MENTOR ? 'bg-blue-50 text-blue-600' : 'bg-amber-50 text-amber-600'
+                                actor.type === ActorType.MENTOR ? 'bg-blue-50 text-blue-600' : 
+                                actor.type === ActorType.PARTNER ? 'bg-amber-50 text-amber-600' : 'bg-purple-50 text-purple-600'
                               }`}>
                                 {actor.name.charAt(0)}
                               </div>
@@ -395,7 +424,14 @@ export default function App() {
                             <div className="text-xs text-slate-600 flex items-center gap-1">
                               <Globe size={12} className="text-slate-300" /> {actor.region}
                             </div>
-                            <div className="text-xs font-sans text-slate-500">{actor.subType}</div>
+                            <div className="text-xs font-sans text-slate-500">
+                              {actor.subType}
+                              {actor.type === ActorType.PARTNER && actor.resources && (
+                                <div className="mt-1 text-[10px] text-blue-600 font-bold bg-blue-50 px-2 py-0.5 rounded-full inline-block">
+                                  Assets: {actor.resources.length > 30 ? actor.resources.slice(0, 30) + '...' : actor.resources}
+                                </div>
+                              )}
+                            </div>
                             <div className="text-right">
                                <button onClick={() => setView('linkages')} className="text-xs font-bold text-blue-600 hover:underline">Link</button>
                             </div>
@@ -442,7 +478,6 @@ export default function App() {
                        </div>
                     ) : (
                       programs.map(p => {
-                        const associatedLinkages = linkages.filter(l => l.programId === p.id);
                         return (
                           <div key={p.id} className="bg-white border border-slate-200 p-6 rounded-2xl shadow-sm flex flex-col hover:border-blue-300 transition-all group">
                             <div className="flex justify-between items-start mb-4">
@@ -450,7 +485,7 @@ export default function App() {
                                 {p.active ? 'Running' : 'Paused'}
                               </span>
                               <div className="flex items-center gap-2">
-                                <span className="bg-slate-50 px-2 py-0.5 rounded text-[8px] font-bold text-slate-400">LNKS: {associatedLinkages.length}</span>
+                                <span className="bg-slate-50 px-2 py-0.5 rounded text-[8px] font-bold text-slate-400">PTRS: {p.partnerNames?.length || 0}</span>
                                 <span className="text-[10px] text-slate-400 uppercase font-bold">{p.region}</span>
                               </div>
                             </div>
@@ -459,23 +494,15 @@ export default function App() {
                               {p.description}
                             </p>
                             
-                            {associatedLinkages.length > 0 && (
+                            {p.partnerNames && p.partnerNames.length > 0 && (
                               <div className="mb-6 space-y-2">
-                                <p className="text-[8px] font-bold text-slate-400 uppercase tracking-widest px-1">Associated Linkages</p>
-                                <div className="space-y-1">
-                                  {associatedLinkages.slice(0, 5).map(link => {
-                                    const source = actors.find(a => a.id === link.sourceId);
-                                    const target = actors.find(a => a.id === link.targetId);
-                                    return (
-                                      <div key={link.id} className="text-[10px] bg-slate-50 p-2 rounded-lg border border-slate-100 flex flex-col gap-1">
-                                        <div className="font-bold text-slate-700">{source?.name} ⇌ {target?.name}</div>
-                                        <div className="text-[9px] text-slate-400">Type: {link.type}</div>
-                                      </div>
-                                    );
-                                  })}
-                                  {associatedLinkages.length > 5 && (
-                                    <p className="text-[9px] text-slate-400 px-1">+{associatedLinkages.length - 5} additional connections</p>
-                                  )}
+                                <p className="text-[8px] font-bold text-slate-400 uppercase tracking-widest px-1">Linked Partners</p>
+                                <div className="flex flex-wrap gap-1">
+                                  {p.partnerNames.map((name, i) => (
+                                    <div key={i} className="text-[9px] bg-blue-50 text-blue-600 px-2 py-1 rounded font-bold border border-blue-100">
+                                      {name}
+                                    </div>
+                                  ))}
                                 </div>
                               </div>
                             )}
@@ -580,36 +607,37 @@ export default function App() {
                 </motion.div>
               )}
             </AnimatePresence>
-          </div>
         </main>
-      </div>
 
-      {/* Footer Status Bar */}
-      <footer className="h-8 bg-slate-900 text-white/50 px-8 flex items-center justify-between text-[10px] uppercase tracking-widest shrink-0 font-mono">
-        <div className="flex gap-8">
-          <div className="flex items-center gap-2">
-            <span className="w-1.5 h-1.5 bg-emerald-500 rounded-full" />
-            Topology: Stable
+        {/* Footer Status Bar */}
+        <footer className="h-8 bg-slate-900 text-white/50 px-8 flex items-center justify-between text-[10px] uppercase tracking-widest shrink-0 font-mono">
+          <div className="flex gap-8">
+            <div className="flex items-center gap-2">
+              <span className="w-1.5 h-1.5 bg-emerald-500 rounded-full" />
+              Topology: Stable
+            </div>
+            <span>Nodes: {actors.length}</span>
+            <span>Active Linkages: {linkages.length}</span>
           </div>
-          <span>Nodes: {actors.length}</span>
-          <span>Active Linkages: {linkages.length}</span>
-        </div>
-        <div className="flex gap-6">
-          <span className="text-slate-500">Session ID: <span className="text-slate-300">ADMIN-{user.uid.slice(0, 8)}</span></span>
-          <span className="text-blue-400">v2.4.1-STABLE</span>
-        </div>
-      </footer>
+          <div className="flex gap-6">
+            <span className="text-slate-500">Session ID: <span className="text-slate-300">ADMIN-{user.uid.slice(0, 8)}</span></span>
+            <span className="text-blue-400">v2.4.1-STABLE</span>
+          </div>
+        </footer>
+      </div>
 
       <AddActorModal 
         isOpen={isAddActorModalOpen} 
         onClose={() => setIsAddActorModalOpen(false)} 
         userId={user.uid} 
+        programs={programs}
       />
 
       <AddProgramModal
         isOpen={isAddProgramModalOpen}
         onClose={() => setIsAddProgramModalOpen(false)}
         userId={user.uid}
+        actors={actors}
       />
 
       <ProgramDetailsModal

@@ -58,11 +58,12 @@ service cloud.firestore {
     
     function isValidActor(data) {
       return data.name is string && data.name.size() > 0 && data.name.size() <= 500 &&
-             data.type in ['company', 'mentor', 'partner'] &&
+             data.type in ['company', 'mentor', 'partner', 'service_provider'] &&
              data.ownerId == request.auth.uid &&
              ( !('subType' in data) || (data.subType is string && data.subType.size() <= 500) ) &&
              ( !('region' in data) || (data.region is string && data.region.size() <= 500) ) &&
              ( !('bio' in data) || (data.bio is string && data.bio.size() <= 2000) ) &&
+             ( !('resources' in data) || (data.resources is string && data.resources.size() <= 2000) ) &&
              ( !('createdAt' in data) || data.createdAt == request.time ) &&
              ( !('updatedAt' in data) || data.updatedAt == request.time );
     }
@@ -73,6 +74,7 @@ service cloud.firestore {
              ( !('description' in data) || (data.description is string && data.description.size() <= 2000) ) &&
              ( !('region' in data) || (data.region is string && data.region.size() <= 500) ) &&
              ( !('active' in data) || data.active is bool ) &&
+             ( !('partnerNames' in data) || (data.partnerNames is list && data.partnerNames.size() <= 100) ) &&
              ( !('createdAt' in data) || data.createdAt == request.time ) &&
              ( !('updatedAt' in data) || data.updatedAt == request.time );
     }

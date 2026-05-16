@@ -44,8 +44,8 @@ export default function ProgramDetailsModal({ program, onClose, associatedLinkag
               </span>
             </div>
             <div className="bg-slate-50 p-4 rounded-xl border border-slate-100">
-              <p className="text-[10px] font-bold text-slate-400 uppercase mb-1">Entity Load</p>
-              <p className="text-sm font-bold text-slate-700">{associatedLinkages.length} Nodes</p>
+              <p className="text-[10px] font-bold text-slate-400 uppercase mb-1">Partners</p>
+              <p className="text-sm font-bold text-slate-700">{program.partnerNames?.length || 0} Registered</p>
             </div>
           </div>
 
@@ -59,44 +59,21 @@ export default function ProgramDetailsModal({ program, onClose, associatedLinkag
             </p>
           </div>
 
-          {/* Detailed Linkage Ledger */}
-          <div>
-            <h3 className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-4 flex items-center gap-2">
-              <Boxes size={14} className="text-blue-500" /> Structural Linkages
-            </h3>
-            <div className="border border-slate-100 rounded-xl overflow-hidden bg-white shadow-sm">
-              <table className="w-full text-left text-xs">
-                <thead className="bg-slate-50 border-b border-slate-100 font-bold text-slate-500 uppercase text-[9px]">
-                  <tr>
-                    <th className="px-4 py-3">Source Node</th>
-                    <th className="px-4 py-3">Target Node</th>
-                    <th className="px-4 py-3">Relationship</th>
-                    <th className="px-4 py-3 text-right">Confidence</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-50 text-slate-600">
-                  {associatedLinkages.length === 0 ? (
-                    <tr>
-                      <td colSpan={4} className="px-4 py-12 text-center text-slate-300 font-mono">No linkages attributed to this blueprint context</td>
-                    </tr>
-                  ) : (
-                    associatedLinkages.map(link => {
-                      const source = actors.find(a => a.id === link.sourceId);
-                      const target = actors.find(a => a.id === link.targetId);
-                      return (
-                        <tr key={link.id} className="hover:bg-blue-50/30 transition-colors">
-                          <td className="px-4 py-3 font-bold text-slate-800">{source?.name}</td>
-                          <td className="px-4 py-3 font-bold text-slate-800">{target?.name}</td>
-                          <td className="px-4 py-3 opacity-60">{link.type}</td>
-                          <td className="px-4 py-3 text-right font-mono text-blue-600">{(link.engagementScore || 0).toFixed(2)}</td>
-                        </tr>
-                      );
-                    })
-                  )}
-                </tbody>
-              </table>
+          {/* Assigned Partners */}
+          {program.partnerNames && program.partnerNames.length > 0 && (
+            <div>
+              <h3 className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-3 flex items-center gap-2">
+                <Shield size={14} className="text-blue-500" /> Assigned Partners
+              </h3>
+              <div className="flex flex-wrap gap-2">
+                {program.partnerNames.map((name, i) => (
+                  <div key={i} className="px-3 py-1.5 bg-blue-50 text-blue-600 border border-blue-100 rounded-lg text-[10px] font-bold flex items-center gap-2">
+                    <Activity size={10} /> {name}
+                  </div>
+                ))}
+              </div>
             </div>
-          </div>
+          )}
 
           {/* System Control Interface (Future) */}
           <div className="bg-slate-900 p-6 rounded-2xl text-white shadow-xl relative overflow-hidden">
