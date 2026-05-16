@@ -8,6 +8,7 @@ import { extractActorInfo } from '../services/gemini';
 
 export default function AddActorModal({ isOpen, onClose, userId }: { isOpen: boolean, onClose: () => void, userId: string }) {
   const [name, setName] = useState('');
+  const [email, setEmail] = useState('');
   const [type, setType] = useState<ActorType>(ActorType.COMPANY);
   const [sector, setSector] = useState('');
   const [region, setRegion] = useState('');
@@ -58,6 +59,7 @@ export default function AddActorModal({ isOpen, onClose, userId }: { isOpen: boo
     try {
       const actorData = {
         name: name.trim(),
+        email: email.trim(),
         type,
         subType: sector.trim(),
         region: region.trim(),
@@ -72,6 +74,7 @@ export default function AddActorModal({ isOpen, onClose, userId }: { isOpen: boo
       
       // Reset fields
       setName('');
+      setEmail('');
       setSector('');
       setRegion('');
       setBio('');
@@ -176,6 +179,21 @@ export default function AddActorModal({ isOpen, onClose, userId }: { isOpen: boo
               onChange={e => setName(e.target.value)}
               className="w-full bg-slate-50 border border-slate-200 p-3 text-sm focus:border-blue-600 focus:bg-white rounded-xl outline-none transition-all"
               placeholder="e.g. Acme Fintech AI"
+            />
+          </div>
+
+           <div>
+            <label className="text-[10px] font-bold uppercase tracking-widest text-slate-400 block mb-1.5 ml-1">
+              Contact Email
+            </label>
+
+            <input
+              type="email"
+              required
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              className="w-full bg-slate-50 border border-slate-200 p-3 text-sm focus:border-blue-600 focus:bg-white rounded-xl outline-none transition-all"
+              placeholder="e.g. contact@company.com"
             />
           </div>
 
