@@ -21,7 +21,7 @@ export const generateLinkageSuggestions = async (
     Recommend the top 3 best matches. For each match, provide:
     1. The ID of the target.
     2. A short justification (aiJustification) explaining why this match is optimal and what the expected outcome is.
-    3. A confidence score (0-1).
+    3. A confidence score (0-100).
   `;
 
   try {
@@ -37,7 +37,7 @@ export const generateLinkageSuggestions = async (
             properties: {
               targetId: { type: Type.STRING },
               justification: { type: Type.STRING },
-              score: { type: Type.NUMBER }
+              score: { type: Type.NUMBER, description: "Confidence score from 0 to 100" }
             },
             required: ["targetId", "justification", "score"]
           }
@@ -181,5 +181,63 @@ export const suggestPartnersForProgram = async (program: any, partners: any[]) =
   } catch (error) {
     console.error("Partner suggestion analysis failed:", error);
     return [];
+  }
+};
+
+export const analyzeLinkageCompletion = async (
+  adminEvaluation: number, // 1-5 scale
+  reviews: any[],
+  actor1: any,
+  actor2: any
+) => {
+  const prompt = `
+    You are an AI ecosystem evaluator. A relationship between two entities has just been marked as COMPLETED.
+    Your task is to analyze the entire REVIEW HISTORY and calculate a final Engagement Score (%) based on the rubric below.
+
+    RUBRIC WEIGHTING (Total 100%):
+    1. Meeting Frequency (30%): Analyze text for mentions of syncs, calls, or meeting consistency.
+    2. Feedback Rating (30%): Average of the 1-5 star ratings provided in the reviews + sentiment analysis of text.
+    3. Goal Completion (20%): Analyze text for mentions of hit targets, finished projects, or successful outcomes.
+    4. Responsiveness (10%): Analyze text for mentions of communication speed or reliability.
+    5. Admin Evaluation (10%): Use the provided Admin Score [Scale 1-5] -> (${adminEvaluation}/5 * 100).
+
+    REVIEW HISTORY:
+    ${JSON.stringify(reviews, null, 2)}
+
+    ENTITIES:
+    1. ${actor1.name} (${actor1.type})
+    2. ${actor2.name} (${actor2.type})
+
+    INSTRUCTIONS:
+    - Extract quantitative insights from the qualitative review text.
+    - Calculate a final score out of 100.
+    - Generate a concise (1-2 sentence) performance summary for BOTH entities.
+
+    Return a JSON object with:
+    1. score: Total Engagement Score (0-100)
+    2. summary: The performance summary.
+  `;
+
+  try {
+    const response = await ai.models.generateContent({
+      model: "gemini-3-flash-preview",
+      contents: prompt,
+      config: {
+        responseMimeType: "application/json",
+        responseSchema: {
+          type: Type.OBJECT,
+          properties: {
+            score: { type: Type.NUMBER },
+            summary: { type: Type.STRING }
+          },
+          required: ["score", "summary"]
+        }
+      }
+    });
+
+    return JSON.parse(response.text || '{"score": 0, "summary": "N/A"}');
+  } catch (error) {
+    console.error("Linkage completion analysis failed:", error);
+    return { score: 0, summary: "Analysis failed." };
   }
 };

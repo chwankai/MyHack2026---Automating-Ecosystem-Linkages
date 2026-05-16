@@ -166,7 +166,7 @@ export default function Matchmaker({ actors, programs, linkages, userId }: { act
                     <div className="flex justify-between items-start mb-3">
                       <div>
                         <h4 className="font-bold text-slate-800 text-base tracking-tight">{target?.name}</h4>
-                        <div className="text-[9px] font-bold text-blue-600 uppercase tracking-widest mt-0.5">Propensity Score: {(s.score * 100).toFixed(1)}%</div>
+                        <div className="text-[9px] font-bold text-blue-600 uppercase tracking-widest mt-0.5">Propensity Score: {(s.score / 100).toFixed(2)}</div>
                       </div>
                       <button 
                         onClick={() => setSuggestions(prev => prev.filter(item => item.targetId !== s.targetId))}

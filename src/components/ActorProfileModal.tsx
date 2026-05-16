@@ -1,5 +1,5 @@
 import React from 'react';
-import { X, Building2, Globe, FileText, Database, Package, Link2, Users } from 'lucide-react';
+import { X, Building2, Globe, FileText, Database, Package, Link2, Users, TrendingUp, Star } from 'lucide-react';
 import { motion } from 'motion/react';
 import { Actor, ActorType, Linkage, Program } from '../types';
 
@@ -96,6 +96,37 @@ export default function ActorProfileModal({ actor, onClose, associatedLinkages, 
                   <div key={i} className="px-4 py-3 bg-purple-50/50 border border-purple-100 rounded-lg text-sm flex items-center justify-between">
                     <span className="font-bold text-purple-900">{p.title}</span>
                     <span className="text-[10px] font-bold uppercase bg-purple-100 text-purple-700 px-2 py-0.5 rounded-full">{p.active ? 'Active' : 'Paused'}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Engagement History */}
+          {actor.engagementHistory && actor.engagementHistory.length > 0 && (
+            <div>
+              <h3 className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-3 flex items-center gap-2">
+                <TrendingUp size={14} className="text-emerald-500" /> Engagement Record
+              </h3>
+              <div className="space-y-3">
+                {actor.engagementHistory.slice().reverse().map((record, i) => (
+                  <div key={i} className="p-4 bg-white border border-slate-200 rounded-xl shadow-sm space-y-2">
+                    <div className="flex justify-between items-center">
+                      <div className="flex items-center gap-2">
+                        <div className="bg-emerald-50 text-emerald-600 px-2 py-0.5 rounded text-[10px] font-bold">
+                          {(record.score / 100).toFixed(2)}
+                        </div>
+                        <span className="text-[10px] font-bold text-slate-400 uppercase tracking-tighter">
+                          {new Date(record.date).toLocaleDateString()}
+                        </span>
+                      </div>
+                      <div className="flex text-amber-400">
+                        {[1, 2, 3, 4, 5].map((s) => (
+                          <Star key={s} size={10} fill={s <= (record.score / 20) ? 'currentColor' : 'none'} />
+                        ))}
+                      </div>
+                    </div>
+                    <p className="text-xs text-slate-600 italic">"{record.summary}"</p>
                   </div>
                 ))}
               </div>

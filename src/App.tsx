@@ -22,7 +22,19 @@ import {
 import { motion, AnimatePresence } from 'motion/react';
 import { auth, loginWithGoogle, logout, db } from './lib/firebase';
 import { onAuthStateChanged, User } from 'firebase/auth';
-import { collection, query, onSnapshot, addDoc, serverTimestamp, writeBatch, doc, deleteDoc } from 'firebase/firestore';
+import { 
+  collection, 
+  query, 
+  onSnapshot, 
+  getDocs,
+  addDoc, 
+  serverTimestamp, 
+  writeBatch, 
+  doc, 
+  deleteDoc,
+  setDoc,
+  arrayUnion
+} from 'firebase/firestore';
 import { Actor, ActorType, Linkage, Program, LinkageStatus } from './types';
 import { generateLinkageSuggestions } from './services/gemini';
 import AddActorModal from './components/AddActorModal';
@@ -30,6 +42,8 @@ import AddProgramModal from './components/AddProgramModal';
 import ProgramDetailsModal from './components/ProgramDetailsModal';
 import ActorProfileModal from './components/ActorProfileModal';
 import Matchmaker from './components/Matchmaker';
+import LinkageReviewModal from './components/LinkageReviewModal';
+import { analyzeLinkageCompletion } from './services/gemini';
 
 // --- Sub-components ---
 
@@ -71,6 +85,8 @@ export default function App() {
   const [isAddProgramModalOpen, setIsAddProgramModalOpen] = useState(false);
   const [selectedProgram, setSelectedProgram] = useState<Program | null>(null);
   const [selectedActor, setSelectedActor] = useState<Actor | null>(null);
+  const [selectedLinkage, setSelectedLinkage] = useState<Linkage | null>(null);
+  const [filterStatus, setFilterStatus] = useState<string>('all');
 
   const handleDeleteActor = async (e: React.MouseEvent, id: string) => {
     e.stopPropagation();
@@ -108,41 +124,170 @@ export default function App() {
     }
   };
 
+  const handleUpdateLinkage = async (updates: Partial<Linkage>, newReview?: any) => {
+    if (!selectedLinkage) return;
+    
+    try {
+      const linkageRef = doc(db, 'linkages', selectedLinkage.id);
+      const finalUpdates: any = { ...updates, updatedAt: serverTimestamp() };
+      
+      if (newReview) {
+        finalUpdates.reviews = arrayUnion(newReview);
+      }
+
+      if (updates.status === LinkageStatus.COMPLETED) {
+        const source = actors.find(a => a.id === selectedLinkage.sourceId);
+        const target = actors.find(a => a.id === selectedLinkage.targetId);
+        
+        if (source && target) {
+          const adminEvaluation = (updates as any).adminEvaluation || 5;
+          const result = await analyzeLinkageCompletion(
+            adminEvaluation,
+            [...(selectedLinkage.reviews || []), newReview].filter(Boolean),
+            source,
+            target
+          );
+          
+          finalUpdates.engagementScore = result.score;
+          finalUpdates.aiSummary = result.summary;
+
+          // Update Actor Profiles with Engagement History
+          const record = {
+            linkageId: selectedLinkage.id,
+            score: result.score,
+            summary: result.summary,
+            date: new Date().toISOString()
+          };
+
+      await setDoc(doc(db, 'actors', source.id), {
+        engagementHistory: arrayUnion(record)
+      }, { merge: true });
+
+      await setDoc(doc(db, 'actors', target.id), {
+        engagementHistory: arrayUnion(record)
+      }, { merge: true });
+    }
+  }
+
+  await setDoc(linkageRef, finalUpdates, { merge: true });
+} catch (err) {
+  console.error('Error in handleUpdateLinkage:', err);
+  throw err;
+}
+  };
+
   const generateSampleData = async () => {
     if (!user) return;
-    const batch = writeBatch(db);
-    
-    const sampleActors = [
-      { name: 'SkyNet AI', type: ActorType.COMPANY, subType: 'DeepTech', region: 'Silicon Valley', bio: 'Building the next gen of neural networks.' },
-      { name: 'GreenFlow', type: ActorType.COMPANY, subType: 'CleanTech', region: 'Singapore', bio: 'Sustainable water management solutions.' },
-      { name: 'Dr. Sarah Chen', type: ActorType.MENTOR, subType: 'Fintech', region: 'London', bio: 'Former VP at Goldman, 20y expertise.' },
-      { name: 'James Wilson', type: ActorType.MENTOR, subType: 'DeepTech', region: 'Berlin', bio: 'Technical founder with 2 exits.' },
-      { name: 'GovInvest', type: ActorType.PARTNER, subType: 'Venture', region: 'Global', bio: 'Strategic state-backed investment fund.', resources: '$500M Fund, Global Market Access, Regulatory Support' },
-      { name: 'ScaleOps Services', type: ActorType.SERVICE_PROVIDER, subType: 'Legal/Compliance', region: 'New York', bio: 'Specialized regulatory advisory for SaaS.' }
-    ];
+    setLoading(true);
+    try {
+      // 1. Clear Existing Data
+      const collections = ['actors', 'programs', 'linkages'];
+      for (const colName of collections) {
+        const snap = await getDocs(collection(db, colName));
+        const batch = writeBatch(db);
+        snap.docs.forEach(d => batch.delete(d.ref));
+        await batch.commit();
+      }
 
-    sampleActors.forEach(a => {
-      const newDocRef = doc(collection(db, 'actors'));
-      batch.set(newDocRef, {
-        ...a,
-        ownerId: user.uid,
-        createdAt: serverTimestamp(),
-        updatedAt: serverTimestamp(),
-        metadata: {}
+      const batch = writeBatch(db);
+
+      // 2. Define Programs First
+      const prog1Id = doc(collection(db, 'programs')).id;
+      const prog2Id = doc(collection(db, 'programs')).id;
+      const prog3Id = doc(collection(db, 'programs')).id;
+
+      const samplePrograms = [
+        { id: prog1Id, title: 'Nexus DeepTech Accelerator', description: 'GTM for DeepTech series A ventures.', region: 'Global', active: true, createdBy: user.uid, partnerNames: ['SkyNet AI', 'Dr. Sarah Chen', 'James Wilson', 'GovInvest'] },
+        { id: prog2Id, title: 'SEA Sustainability 2025', description: 'Impact-focused cohort for SEA region.', region: 'SEA', active: true, createdBy: user.uid, partnerNames: ['GreenFlow', 'EcoLogistics', 'Regional Dev Bank', 'James Wilson'] },
+        { id: prog3Id, title: 'Fintech B2B Lab', description: 'Scale-up lab for B2B financial services.', region: 'London', active: true, createdBy: user.uid, partnerNames: ['PaySphere', 'ScaleOps Services', 'Dr. Sarah Chen', 'Ventura Capital'] }
+      ];
+
+      samplePrograms.forEach(p => {
+        const { id, ...data } = p;
+        batch.set(doc(db, 'programs', id), data);
       });
-    });
 
-    const samplePrograms = [
-      { title: 'Nexus Accelerator 2024', description: 'GTM for DeepTech companies', region: 'Global', active: true, createdBy: user.uid },
-      { title: 'SEA Sustainability Cohort', description: 'Focused on SEA impact', region: 'SEA', active: true, createdBy: user.uid }
-    ];
+      // 3. Define Actors
+      const actorsList = [
+        { name: 'SkyNet AI', type: ActorType.COMPANY, subType: 'DeepTech', region: 'Silicon Valley', bio: 'Neural network infrastructure.' },
+        { name: 'GreenFlow', type: ActorType.COMPANY, subType: 'CleanTech', region: 'Singapore', bio: 'Sustainable water solutions.' },
+        { name: 'PaySphere', type: ActorType.COMPANY, subType: 'Fintech', region: 'London', bio: 'Cross-border B2B payments.' },
+        { name: 'EcoLogistics', type: ActorType.COMPANY, subType: 'SaaS', region: 'Jakarta', bio: 'Carbon-neutral fleet management.' },
+        { name: 'Dr. Sarah Chen', type: ActorType.MENTOR, subType: 'Fintech', region: 'London', bio: 'Former VP at Goldman, 20y expertise.' },
+        { name: 'James Wilson', type: ActorType.MENTOR, subType: 'DeepTech', region: 'Berlin', bio: 'Technical founder with 2 exits.' },
+        { name: 'GovInvest', type: ActorType.PARTNER, subType: 'Venture', region: 'Global', bio: 'State-backed investment fund.', resources: '$500M Fund, Global Market Access' },
+        { name: 'Regional Dev Bank', type: ActorType.PARTNER, subType: 'Development', region: 'SEA', bio: 'Regional growth catalyst.', resources: 'Grant Funding, Policy Advisory' },
+        { name: 'Ventura Capital', type: ActorType.PARTNER, subType: 'VC', region: 'Europe', bio: 'Early-stage fintech specialists.', resources: 'Network, Series A Prep' },
+        { name: 'ScaleOps Services', type: ActorType.SERVICE_PROVIDER, subType: 'Compliance', region: 'New York', bio: 'Regulatory advisory.' },
+        { name: 'Quantum Cloud', type: ActorType.SERVICE_PROVIDER, subType: 'Cloud Infra', region: 'Global', bio: 'Specialized GPU clusters.' },
+        { name: 'Nexus Legal', type: ActorType.SERVICE_PROVIDER, subType: 'Legal', region: 'London', bio: 'IP and Venture Law.' }
+      ];
 
-    samplePrograms.forEach(p => {
-      const newDocRef = doc(collection(db, 'programs'));
-      batch.set(newDocRef, p);
-    });
+      const actorRefs: any = {};
+      actorsList.forEach(a => {
+        const ref = doc(collection(db, 'actors'));
+        actorRefs[a.name] = ref.id;
+        batch.set(ref, {
+          ...a,
+          ownerId: user.uid,
+          createdAt: serverTimestamp(),
+          updatedAt: serverTimestamp(),
+          metadata: {}
+        });
+      });
 
-    await batch.commit();
+      // 4. Pre-populate Linkages
+      const sampleLinkages = [
+        {
+          sourceId: actorRefs['SkyNet AI'],
+          targetId: actorRefs['James Wilson'],
+          programId: prog1Id,
+          status: LinkageStatus.ACTIVE,
+          type: 'COMPANY_TO_MENTOR',
+          engagementScore: 85,
+          aiJustification: 'Optimal technical alignment for neural infrastructure growth.',
+          reviews: [
+            { entity1Text: "James provided great insights on scaling our clusters.", entity2Text: "Team is very focused and technical.", date: new Date().toISOString() }
+          ]
+        },
+        {
+          sourceId: actorRefs['PaySphere'],
+          targetId: actorRefs['Dr. Sarah Chen'],
+          programId: prog3Id,
+          status: LinkageStatus.COMPLETED,
+          type: 'COMPANY_TO_MENTOR',
+          engagementScore: 92,
+          aiJustification: 'Strong fintech leadership match for London expansion.',
+          aiSummary: 'Successfully navigated regulatory hurdles in the UK market with weekly mentorship syncs.',
+          updatedAt: serverTimestamp()
+        },
+        {
+          sourceId: actorRefs['GreenFlow'],
+          targetId: actorRefs['GovInvest'],
+          programId: prog1Id,
+          status: LinkageStatus.PROPOSED,
+          type: 'COMPANY_TO_PARTNER',
+          engagementScore: 78,
+          aiJustification: 'Strategic alignment for state-backed infrastructure projects.'
+        }
+      ];
+
+      sampleLinkages.forEach(l => {
+        const ref = doc(collection(db, 'linkages'));
+        batch.set(ref, {
+          ...l,
+          createdById: user.uid,
+          createdAt: serverTimestamp(),
+          updatedAt: l.updatedAt || serverTimestamp()
+        });
+      });
+
+      await batch.commit();
+    } catch (err) {
+      console.error("Reset failed:", err);
+    } finally {
+      setLoading(false);
+    }
   };
 
   useEffect(() => {
@@ -314,7 +459,12 @@ export default function App() {
                     <MetricCard label="Total Entity" value={actors.length} trend="+12%" icon={Building2} />
                     <MetricCard label="Active Linkages" value={linkages.length} trend="89.4%" icon={Link2} />
                     <MetricCard label="Programs" value={programs.length} trend="Active" icon={Users} />
-                    <MetricCard label="System Pending" value="0" trend="Clear" icon={Sparkles} />
+                    <MetricCard 
+                      label="Pending Linkages" 
+                      value={linkages.filter(l => l.status === LinkageStatus.PROPOSED || l.status === LinkageStatus.ACTIVE).length} 
+                      trend="Active" 
+                      icon={Sparkles} 
+                    />
                   </div>
 
                   <div className="grid grid-cols-3 gap-6">
@@ -340,12 +490,21 @@ export default function App() {
                                 <tr><td colSpan={5} className="px-6 py-12 text-center text-slate-300 font-mono">No propagation events detected</td></tr>
                               ) : (
                                 linkages.slice(0, 8).map(link => (
-                                  <tr key={link.id} className="hover:bg-blue-50/30 transition-colors">
+                                  <tr 
+                                    key={link.id} 
+                                    onClick={() => setSelectedLinkage(link)}
+                                    className="hover:bg-blue-50/30 transition-colors cursor-pointer"
+                                  >
                                     <td className="px-6 py-3 font-mono text-slate-400">#{link.id.slice(0, 8)}</td>
                                     <td className="px-6 py-3 text-slate-800 font-medium">{link.type.split('_')[0]}</td>
                                     <td className="px-6 py-3">{link.type}</td>
                                     <td className="px-6 py-3">
-                                      <span className={`px-2 py-0.5 rounded-full font-bold ${link.status === LinkageStatus.ACTIVE ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-500'}`}>
+                                      <span className={`px-2 py-0.5 rounded-full font-bold ${
+                                        link.status === LinkageStatus.ACTIVE ? 'bg-emerald-100 text-emerald-700' : 
+                                        link.status === LinkageStatus.COMPLETED ? 'bg-blue-100 text-blue-700' :
+                                        link.status === LinkageStatus.CANCELLED ? 'bg-red-100 text-red-600' :
+                                        'bg-slate-100 text-slate-500'
+                                      }`}>
                                         {link.status}
                                       </span>
                                     </td>
@@ -377,13 +536,29 @@ export default function App() {
 
                       <div className="bg-white border border-slate-200 p-6 rounded-2xl shadow-sm">
                         <h3 className="text-[10px] font-bold tracking-widest uppercase text-slate-400 mb-4">Network Connectivity</h3>
-                        <div className="h-6 flex items-center justify-center bg-slate-50 rounded-lg overflow-hidden border border-slate-100 mb-3">
-                          <div className="h-full bg-blue-600 transition-all duration-1000" style={{ width: '84%' }} />
-                        </div>
-                        <div className="flex justify-between text-[10px] font-bold text-slate-500 uppercase">
-                          <span>Health Score</span>
-                          <span className="text-blue-600">84.2</span>
-                        </div>
+                        {(() => {
+                          const hasLinkages = linkages.length > 0;
+                          const avgScore = hasLinkages 
+                            ? linkages.reduce((acc, l) => acc + (l.engagementScore || 0), 0) / linkages.length 
+                            : 0;
+                          const healthScore = hasLinkages ? (avgScore / 100).toFixed(3) : "0.000";
+                          const barWidth = hasLinkages ? avgScore : 0;
+
+                          return (
+                            <>
+                              <div className="h-6 bg-slate-50 rounded-lg overflow-hidden border border-slate-100 mb-3">
+                                <div 
+                                  className="h-full bg-blue-600 transition-all duration-1000 shadow-[0_0_15px_rgba(37,99,235,0.3)]" 
+                                  style={{ width: `${barWidth}%` }} 
+                                />
+                              </div>
+                              <div className="flex justify-between text-[10px] font-bold text-slate-500 uppercase">
+                                <span>Health Score</span>
+                                <span className="text-blue-600 tracking-widest">{healthScore}</span>
+                              </div>
+                            </>
+                          );
+                        })()}
                       </div>
                     </div>
                   </div>
@@ -619,24 +794,60 @@ export default function App() {
                     <div className="w-2/3 overflow-auto pb-8">
                       <div className="bg-white border border-slate-200 rounded-2xl shadow-sm overflow-hidden flex flex-col h-full">
                         <div className="px-6 py-4 border-b border-slate-100 bg-slate-50/50 flex justify-between items-center">
-                          <h4 className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Active Linkage Propagation Ledger</h4>
+                          <div className="flex items-center gap-6">
+                            <h4 className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Propagation Ledger</h4>
+                            <div className="flex bg-slate-200/50 p-1 rounded-lg gap-1">
+                              {['all', 'active', 'completed', 'cancelled'].map(s => (
+                                <button
+                                  key={s}
+                                  onClick={() => setFilterStatus(s)}
+                                  className={`px-3 py-1 rounded-md text-[9px] font-bold uppercase tracking-wider transition-all ${
+                                    filterStatus === s 
+                                      ? 'bg-white text-blue-600 shadow-sm' 
+                                      : 'text-slate-400 hover:text-slate-600'
+                                  }`}
+                                >
+                                  {s}
+                                </button>
+                              ))}
+                            </div>
+                          </div>
                           <div className="flex gap-1">
                             {[1,2,3].map(i => <div key={i} className="w-1 h-1 bg-blue-600 rounded-full animate-pulse" style={{ animationDelay: `${i * 200}ms` }} />)}
                           </div>
                         </div>
                         <div className="flex-1 overflow-auto divide-y divide-slate-50">
-                          {linkages.length === 0 ? (
-                             <div className="h-full flex flex-col items-center justify-center p-12 text-center">
-                                <Link2 size={32} className="text-slate-100 mb-4" />
-                                <p className="text-slate-300 font-sans">Zero active linkages in current architect session</p>
-                             </div>
-                          ) : (
-                            linkages.map(link => {
+                          {(() => {
+                            const filtered = [...linkages]
+                              .filter(l => filterStatus === 'all' || l.status.toLowerCase() === filterStatus.toLowerCase())
+                              .sort((a, b) => {
+                                const ta = (a.createdAt as any)?.seconds || 0;
+                                const tb = (b.createdAt as any)?.seconds || 0;
+                                return tb - ta;
+                              });
+
+                            if (filtered.length === 0) {
+                              return (
+                                <div className="h-full flex flex-col items-center justify-center p-12 text-center">
+                                  <Link2 size={32} className="text-slate-100 mb-4" />
+                                  <p className="text-slate-300 font-sans italic">
+                                    Zero {filterStatus !== 'all' ? filterStatus : ''} linkages found
+                                  </p>
+                                </div>
+                              );
+                            }
+
+                            return filtered.map(link => {
+
                               const source = actors.find(a => a.id === link.sourceId);
                               const target = actors.find(a => a.id === link.targetId);
                               const program = programs.find(p => p.id === link.programId);
                               return (
-                                <div key={link.id} className="p-6 hover:bg-slate-50/50 transition-colors group">
+                                <div 
+                                  key={link.id} 
+                                  onClick={() => setSelectedLinkage(link)}
+                                  className="p-6 hover:bg-slate-50 transition-all group cursor-pointer relative"
+                                >
                                   <div className="flex items-center justify-between mb-4">
                                     <div className="flex items-center gap-3">
                                       <div className="px-2 py-1 bg-slate-900 text-white text-[9px] font-bold rounded uppercase">
@@ -656,7 +867,12 @@ export default function App() {
                                       )}
                                     </div>
                                     <div className="flex items-center gap-3">
-                                      <div className={`px-2 py-0.5 rounded-full text-[9px] font-bold uppercase ${link.status === LinkageStatus.ACTIVE ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-500'}`}>
+                                      <div className={`px-2 py-0.5 rounded-full text-[9px] font-bold uppercase ${
+                                        link.status === LinkageStatus.ACTIVE ? 'bg-emerald-100 text-emerald-700' : 
+                                        link.status === LinkageStatus.COMPLETED ? 'bg-blue-100 text-blue-700' :
+                                        link.status === LinkageStatus.CANCELLED ? 'bg-red-100 text-red-600' :
+                                        'bg-slate-100 text-slate-500'
+                                      }`}>
                                         {link.status}
                                       </div>
                                       <button onClick={(e) => handleDeleteLinkage(e, link.id)} className="text-slate-400 hover:text-red-500 transition-colors">
@@ -667,7 +883,11 @@ export default function App() {
                                   <div className="flex gap-4 items-start">
                                     <div className="flex-1">
                                       <div className="text-sm font-bold text-slate-800 mb-1">{source?.name} ⇌ {target?.name}</div>
-                                      <div className="text-[10px] font-mono text-slate-400 mb-4">{link.type} • Confidence: {link.engagementScore?.toFixed(2)}</div>
+                                      <div className="text-xs font-mono text-slate-500 mb-4">
+                                        {link.type} • <span className="font-bold text-blue-600 text-[13px]">
+                                          {link.status === LinkageStatus.COMPLETED ? 'Engagement' : 'Confidence'}: {link.engagementScore ? (link.engagementScore / 100).toFixed(2) : '0.00'}
+                                        </span>
+                                      </div>
                                       <div className="text-xs font-sans text-slate-500 leading-relaxed bg-slate-50 p-4 rounded-xl border border-slate-100 group-hover:bg-white transition-colors relative">
                                         <div className="absolute -left-2 top-4 w-1 h-8 bg-blue-500 opacity-20" />
                                         {link.aiJustification}
@@ -676,8 +896,8 @@ export default function App() {
                                   </div>
                                 </div>
                               );
-                            })
-                          )}
+                            });
+                          })()}
                         </div>
                       </div>
                     </div>
@@ -731,6 +951,17 @@ export default function App() {
         associatedLinkages={linkages.filter(l => l.sourceId === selectedActor?.id || l.targetId === selectedActor?.id)}
         programs={programs}
       />
+
+      {selectedLinkage && (
+        <LinkageReviewModal
+          isOpen={!!selectedLinkage}
+          onClose={() => setSelectedLinkage(null)}
+          linkage={selectedLinkage}
+          source={actors.find(a => a.id === selectedLinkage.sourceId) || null}
+          target={actors.find(a => a.id === selectedLinkage.targetId) || null}
+          onUpdate={handleUpdateLinkage}
+        />
+      )}
     </div>
   );
 }
